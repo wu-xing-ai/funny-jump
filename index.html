@@ -78,6 +78,26 @@
     #subtitle{font-size:12px}
     #keysTouch,#tip{font-size:11px}
   }
+  /* 第二档：超矮视口（手机全屏横屏典型高度约350-400px），结算卡极限紧凑化确保一屏放下 */
+  @container (max-height:430px){
+    .screen{gap:5px;padding:6px}
+    .card{padding:9px 11px;border-radius:12px}
+    .card h2{font-size:16px;margin:0}
+    #goMsg{display:none}
+    .stats{gap:5px;margin-bottom:4px}
+    .stat{padding:2px 6px;min-width:56px;border-width:2px}
+    .stat .val{font-size:13px}
+    .stat .lab{font-size:8px}
+    .field label{display:none}
+    .card input[type=text]{padding:5px 7px;font-size:12px;border-width:2px}
+    .checkline{font-size:10px;margin:2px 0}
+    #saveScoreBtn{padding:6px 10px;font-size:12px}
+    #submitBox{margin-top:3px}
+    .row{gap:5px}
+    .btn{padding:8px 16px;font-size:13px}
+    .btn.small{padding:6px 12px;font-size:11px}
+    .lb-row{font-size:11.5px;padding:4px 6px}
+  }
 
   /* ---------- 标题 ---------- */
   #title{display:flex;gap:6px;font-size:clamp(40px,8.5vw,84px);font-weight:900;line-height:1;
@@ -249,6 +269,7 @@
     <div class="row">
       <button id="startBtn" class="btn">开始冒险</button>
       <button id="lbBtn" class="btn small" style="animation:pulse 1.6s ease-in-out infinite;background:linear-gradient(180deg,var(--yellow),#e8b00c);color:#6b4a00;box-shadow:0 5px 0 #b3860a">排行榜</button>
+      <button id="fsLandBtn" class="btn small" style="background:linear-gradient(180deg,#b197fc,#7048e0);box-shadow:0 5px 0 #5f3dc4">⛶ 横屏全屏</button>
     </div>
     <div id="keys"><kbd>空格</kbd>/<kbd>↑</kbd>/<kbd>点击</kbd> 跳跃（长按更高）　空中可<b>二段跳</b><br><kbd>P</kbd> 暂停　<kbd>R</kbd> 重开　<kbd>M</kbd> 静音</div>
     <div id="keysTouch">👆 点击屏幕跳跃，按住跳得更高，空中再点一下＝二段跳</div>
@@ -1266,14 +1287,21 @@ function resetRun(){
 /* 手机端：开始游戏时尝试全屏+锁定横屏，避免系统自动旋转打断对局
    （Android 支持最好；iOS 的 Safari 不支持网页全屏/锁向，会静默跳过，
     由 CSS 旋转方案兑底保证竖屏也能正常玩） */
-async function enterGameMode(){
+/* 进入横屏全屏：任何屏幕方向下点击都能生效
+   （Android 完整支持；iPhone 的 Safari 不支持网页全屏/锁向，按钮会提示） */
+async function goFullscreenLandscape(){
   try{
-    if (!matchMedia('(pointer:coarse)').matches) return;
     if (!document.fullscreenElement && document.documentElement.requestFullscreen)
       await document.documentElement.requestFullscreen();
+  }catch(e){}
+  try{
     if (screen.orientation && screen.orientation.lock)
       await screen.orientation.lock('landscape');
-  }catch(e){ /* 桌面端或不支持的环境直接忽略 */ }
+  }catch(e){}
+}
+async function enterGameMode(){
+  if (!matchMedia('(pointer:coarse)').matches) return;
+  await goFullscreenLandscape();
 }
 function startGame(){
   ac();
@@ -1577,6 +1605,15 @@ $('pauseBtn').addEventListener('click', () => {
   if (state !== 'play') return;
   pauseGame(!paused);
   sfxClick();
+});
+// 一键横屏全屏按钮
+$('fsLandBtn').addEventListener('click', async () => {
+  ac(); sfxClick();
+  const b = $('fsLandBtn'), old = b.textContent;
+  b.textContent = '设置中…';
+  await goFullscreenLandscape();
+  b.textContent = document.fullscreenElement ? '已全屏 ✓' : '此设备不支持';
+  setTimeout(() => b.textContent = old, 1600);
 });
 // 全屏切换（iPhone 的 Safari 不支持网页全屏，会自动隐藏这个按钮）
 if (document.documentElement.requestFullscreen){
