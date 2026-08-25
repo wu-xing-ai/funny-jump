@@ -49,10 +49,11 @@
     position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
     gap:14px;text-align:center;z-index:10;padding:16px;
     background:rgba(20,12,40,.35);backdrop-filter:blur(2px);
-    transition:opacity .25s;
+    transition:opacity .25s, visibility .25s;
     overflow-y:auto;
+    visibility:visible;
   }
-  .screen.hide{opacity:0;pointer-events:none}
+  .screen.hide{opacity:0;pointer-events:none;visibility:hidden}
   .screen>*{flex-shrink:0}
   /* 弹性上下占位：内容放得下时垂直居中；放不下时自动贴顶+可滚动，底部按钮永不被裁切 */
   .screen::before,.screen::after{content:'';flex:1 1 0;min-height:6px}
@@ -376,10 +377,19 @@ const BASE_SPEED = 340, MAX_SPEED = 860, ACCEL = 9;
 const GRAV = 2600, JUMP_V = -880, DJUMP_V = -760, MAX_FALL = 1350, COYOTE = 0.08;
 
 const cv = document.getElementById('cv');
-const ctx = cv.getContext('2d');
+const ctx = cv.getContext('2d', { alpha: false, desynchronized: true });
 const DPR = Math.min(window.devicePixelRatio || 1, 2);
+/* 自适应画质：手机帧率不足时自动降渲染分辨率，保流畅优先 */
+const QSCALE = [1, 0.85, 0.72];
+let qLevel = 0;
 cv.width = W * DPR; cv.height = H * DPR;
 ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+function applyRes(){
+  const s = DPR * QSCALE[qLevel];
+  cv.width = Math.max(1, Math.round(W * s));
+  cv.height = Math.max(1, Math.round(H * s));
+  ctx.setTransform(s, 0, 0, s, 0, 0);
+}
 
 /* ---------- 小工具 ---------- */
 const rand  = (a, b) => a + Math.random() * (b - a);
@@ -397,8 +407,12 @@ function rgbOf(hex){
 }
 function mixHex(a, b, t){
   const A = rgbOf(a), B = rgbOf(b);
-  return `rgb(${Math.round(lerp(A[0],B[0],t))},${Math.round(lerp(A[1],B[1],t))},${Math.round(lerp(A[2],B[2],t))})`;
+  // 色值量化到12级：调色板稳定后渐变缓存才能命中
+  const q = v => Math.min(255, Math.round(v / 12) * 12);
+  return `rgb(${q(lerp(A[0],B[0],t))},${q(lerp(A[1],B[1],t))},${q(lerp(A[2],B[2],t))})`;
 }
+/* 渐变缓存：key相同直接复用，避免每帧新建对象 */
+const gradCache = {};
 function rr(x, y, w, h, r){ // 圆角矩形路径
   r = Math.min(r, w/2, h/2);
   ctx.beginPath();
@@ -545,17 +559,30 @@ function iterSeg(segW, fac, cb){ // 视差循环片段工具
 }
 
 function drawSky(){
-  const g = ctx.createLinearGradient(0, 0, 0, GY + 40);
-  g.addColorStop(0, PAL.top); g.addColorStop(1, PAL.bot);
-  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  // 天空渐变缓存（色值已量化，命中率高）
+  const skyKey = 'sky' + PAL.top + PAL.bot;
+  if (gradCache.skyKey !== skyKey){
+    gradCache.skyKey = skyKey;
+    gradCache.sky = ctx.createLinearGradient(0, 0, 0, GY + 40);
+    gradCache.sky.addColorStop(0, PAL.top); gradCache.sky.addColorStop(1, PAL.bot);
+  }
+  ctx.fillStyle = gradCache.sky; ctx.fillRect(0, 0, W, H);
 
-  // 夜星
+  // 夜星：按亮度分三桶批量绘制（3次fill代替80次）
   if (PAL.starA > 0.02){
-    for (const s of bgStars){
-      const a = PAL.starA * (0.35 + 0.65 * Math.abs(Math.sin(time * s.tw + s.ph)));
-      ctx.globalAlpha = a;
+    const B = [0.28, 0.6, 0.95];
+    for (let bk = 0; bk < 3; bk++){
+      ctx.globalAlpha = PAL.starA * B[bk];
       ctx.fillStyle = '#fff';
-      ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 7); ctx.fill();
+      ctx.beginPath();
+      for (const s of bgStars){
+        const a = 0.35 + 0.65 * Math.abs(Math.sin(time * s.tw + s.ph));
+        if ((bk === 0 && a < 0.45) || (bk === 1 && a >= 0.45 && a < 0.75) || (bk === 2 && a >= 0.75)){
+          ctx.moveTo(s.x + s.r, s.y);
+          ctx.arc(s.x, s.y, s.r, 0, 7);
+        }
+      }
+      ctx.fill();
     }
     ctx.globalAlpha = 1;
   }
@@ -563,19 +590,23 @@ function drawSky(){
   const sx = W * 0.8, sy = 108, night = PAL.night;
   if (night < 0.98){
     ctx.save(); ctx.globalAlpha = 1 - night;
-    const rg = ctx.createRadialGradient(sx, sy, 10, sx, sy, 110);
-    rg.addColorStop(0, 'rgba(255,236,150,.85)'); rg.addColorStop(1, 'rgba(255,236,150,0)');
-    ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(sx, sy, 110, 0, 7); ctx.fill();
-    ctx.rotate ? 0 : 0;
+    // 太阳光晕：三层圆代替径向渐变（避免每帧建对象）
+    ctx.fillStyle = 'rgba(255,236,150,.07)';
+    ctx.beginPath(); ctx.arc(sx, sy, 110, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(255,236,150,.10)';
+    ctx.beginPath(); ctx.arc(sx, sy, 72, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(255,236,150,.16)';
+    ctx.beginPath(); ctx.arc(sx, sy, 46, 0, 7); ctx.fill();
     ctx.save(); ctx.translate(sx, sy); ctx.rotate(time * 0.25);
     ctx.strokeStyle = 'rgba(255,220,90,.6)'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+    // 光芒批量：一条路径一次stroke
+    ctx.beginPath();
     for (let i = 0; i < 12; i++){
       const a = i * Math.PI / 6;
-      ctx.beginPath();
       ctx.moveTo(Math.cos(a)*54, Math.sin(a)*54);
       ctx.lineTo(Math.cos(a)*68, Math.sin(a)*68);
-      ctx.stroke();
     }
+    ctx.stroke();
     ctx.restore();
     ctx.fillStyle = '#ffdf5e'; ctx.strokeStyle = 'rgba(200,140,20,.5)'; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.arc(sx, sy, 44, 0, 7); ctx.fill(); ctx.stroke();
@@ -597,126 +628,165 @@ function drawSky(){
   }
 }
 function drawClouds(){
+  // 两批绘制：云朵主体 + 高光，各一条路径
   ctx.save();
+  ctx.globalAlpha = PAL.cloudA * 0.92;
+  ctx.fillStyle = PAL.cloud;
+  ctx.beginPath();
   for (const c of clouds){
-    ctx.globalAlpha = PAL.cloudA * 0.92;
-    ctx.fillStyle = PAL.cloud;
     const s = c.s;
-    ctx.beginPath();
+    ctx.moveTo(c.x + 22*s, c.y);
     ctx.arc(c.x,          c.y,    22*s, 0, 7);
     ctx.arc(c.x + 26*s,   c.y-9*s, 17*s, 0, 7);
     ctx.arc(c.x - 26*s,   c.y-4*s, 15*s, 0, 7);
     ctx.arc(c.x + 8*s,    c.y-16*s,14*s, 0, 7);
-    ctx.fill();
-    ctx.globalAlpha = PAL.cloudA * 0.5;
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath(); ctx.arc(c.x + 4*s, c.y - 8*s, 10*s, 0, 7); ctx.fill();
   }
+  ctx.fill();
+  ctx.globalAlpha = PAL.cloudA * 0.5;
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  for (const c of clouds){
+    const s = c.s;
+    ctx.moveTo(c.x + 4*s + 10*s, c.y - 8*s);
+    ctx.arc(c.x + 4*s, c.y - 8*s, 10*s, 0, 7);
+  }
+  ctx.fill();
   ctx.restore();
 }
 function drawMountains(){
+  // 山体与雪顶各自合并成单条路径，两次填充完成
+  const snow = [];
   ctx.fillStyle = PAL.mfar;
+  ctx.beginPath();
   iterSeg(270, 0.12, (x, idx) => {
     const h = 95 + hash(idx) * 115;
-    ctx.beginPath();
     ctx.moveTo(x - 40, GY - 20);
     ctx.lineTo(x + 135, GY - 20 - h);
     ctx.lineTo(x + 310, GY - 20);
-    ctx.closePath(); ctx.fill();
-    // 雪顶
-    ctx.fillStyle = PAL.night > 0.5 ? 'rgba(220,228,255,.75)' : 'rgba(255,255,255,.85)';
-    ctx.beginPath();
-    ctx.moveTo(x + 103, GY - 20 - h * 0.72);
-    ctx.lineTo(x + 135, GY - 20 - h);
-    ctx.lineTo(x + 167, GY - 20 - h * 0.72);
-    ctx.quadraticCurveTo(x + 135, GY - 20 - h*0.6, x + 103, GY - 20 - h*0.72);
-    ctx.fill();
-    ctx.fillStyle = PAL.mfar;
+    snow.push([x + 103, GY - 20 - h * 0.72, x + 135, GY - 20 - h, x + 167]);
   });
+  ctx.fill();
+  ctx.fillStyle = PAL.night > 0.5 ? 'rgba(220,228,255,.75)' : 'rgba(255,255,255,.85)';
+  ctx.beginPath();
+  for (const [ax, ay, bx, by, cx2] of snow){
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(bx, by);
+    ctx.lineTo(cx2, ay);
+    ctx.quadraticCurveTo(bx, ay - (GY - 20 - ay) * 0.4 * -1 * 0, bx, ay); // 贴底回扫
+    ctx.quadraticCurveTo(bx, by + (ay - by) * 0.25, ax, ay);
+  }
+  ctx.fill();
 }
 function drawHills(){
   ctx.fillStyle = PAL.hill;
+  ctx.beginPath();
   iterSeg(185, 0.3, (x, idx) => {
     const r = 62 + hash(idx * 3 + 7) * 62;
-    ctx.beginPath();
+    ctx.moveTo(x + 92 - r, GY + 6);
     ctx.arc(x + 92, GY + 6, r, Math.PI, 0);
-    ctx.fill();
   });
+  ctx.fill();
 }
 function drawGround(){
-  const g = ctx.createLinearGradient(0, GY, 0, H);
-  g.addColorStop(0, PAL.gtop); g.addColorStop(1, PAL.gbot);
-  ctx.fillStyle = g; ctx.fillRect(0, GY, W, H - GY);
-  // 草皮波浪边
+  const gKey = 'gnd' + PAL.gtop + PAL.gbot;
+  if (gradCache.gKey !== gKey){
+    gradCache.gKey = gKey;
+    gradCache.gnd = ctx.createLinearGradient(0, GY, 0, H);
+    gradCache.gnd.addColorStop(0, PAL.gtop); gradCache.gnd.addColorStop(1, PAL.gbot);
+  }
+  ctx.fillStyle = gradCache.gnd; ctx.fillRect(0, GY, W, H - GY);
+  // 草皮波浪边：批量弧形一次填充
   ctx.fillStyle = PAL.gtop;
+  ctx.beginPath();
   iterSeg(34, 1, x => {
-    ctx.beginPath(); ctx.arc(x + 17, GY + 2, 16, Math.PI, 0); ctx.fill();
+    ctx.moveTo(x + 1, GY + 2);
+    ctx.arc(x + 17, GY + 2, 16, Math.PI, 0);
   });
+  ctx.fill();
   ctx.strokeStyle = 'rgba(0,0,0,.14)'; ctx.lineWidth = 3;
   ctx.beginPath(); ctx.moveTo(0, GY + 3); ctx.lineTo(W, GY + 3); ctx.stroke();
 }
 function drawTrees(){
+  // 分类收集后按颜色批量绘制：树干/树冠/灌木/花各一次填充
+  const trunks = [], canopies = [], bushes = [], stems = [];
+  const petals = {}, centers = [], treeFlowers = {};
   iterSeg(150, 0.55, (x, idx) => {
     const h1 = hash(idx * 5 + 1), h2 = hash(idx * 9 + 4), bx = x + 75;
-    if (h1 < 0.45){ // 大树
+    if (h1 < 0.45){
       const ty = GY - 4, th = 26 + h2 * 14;
-      ctx.fillStyle = PAL.trunk;
-      rr(bx - 5, ty - th, 10, th + 6, 4); ctx.fill();
-      ctx.fillStyle = PAL.tree;
-      ctx.beginPath();
-      ctx.arc(bx, ty - th - 12, 19, 0, 7);
-      ctx.arc(bx - 13, ty - th - 2, 13, 0, 7);
-      ctx.arc(bx + 13, ty - th - 2, 13, 0, 7);
-      ctx.fill();
-      if (h2 > 0.55){ // 树上的小花
-        ctx.fillStyle = ['#ff8fab','#ffd93d','#ff5d8f'][idx % 3];
-        ctx.beginPath(); ctx.arc(bx + 6, ty - th - 20, 3.4, 0, 7); ctx.fill();
+      trunks.push([bx - 5, ty - th, 10, th + 6]);
+      canopies.push([bx, ty - th - 12, 19], [bx - 13, ty - th - 2, 13], [bx + 13, ty - th - 2, 13]);
+      if (h2 > 0.55){
+        const col = ['#ff8fab','#ffd93d','#ff5d8f'][idx % 3];
+        (treeFlowers[col] ??= []).push([bx + 6, ty - th - 20]);
       }
-    } else if (h1 < 0.8){ // 灌木
-      ctx.fillStyle = PAL.tree;
-      ctx.beginPath();
-      ctx.arc(bx, GY - 8, 13, 0, 7);
-      ctx.arc(bx - 12, GY - 3, 9, 0, 7);
-      ctx.arc(bx + 12, GY - 3, 9, 0, 7);
-      ctx.fill();
-    } else { // 野花
-      ctx.strokeStyle = PAL.tree; ctx.lineWidth = 2.5;
-      ctx.beginPath(); ctx.moveTo(bx, GY); ctx.lineTo(bx, GY - 13); ctx.stroke();
-      ctx.fillStyle = ['#ff8fab','#ffd93d','#74c0fc','#ff5d8f'][idx % 4];
-      for (let p = 0; p < 5; p++){
-        const a = p * Math.PI * 2 / 5;
-        ctx.beginPath(); ctx.arc(bx + Math.cos(a)*5, GY - 15 + Math.sin(a)*5, 3.4, 0, 7); ctx.fill();
-      }
-      ctx.fillStyle = '#fff3bf';
-      ctx.beginPath(); ctx.arc(bx, GY - 15, 3, 0, 7); ctx.fill();
+    } else if (h1 < 0.8){
+      bushes.push([bx, GY - 8, 13], [bx - 12, GY - 3, 9], [bx + 12, GY - 3, 9]);
+    } else {
+      stems.push([bx, GY - 13]);
+      const col = ['#ff8fab','#ffd93d','#74c0fc','#ff5d8f'][idx % 4];
+      (petals[col] ??= []).push([bx, GY - 15]);
+      centers.push([bx, GY - 15]);
     }
   });
-  // 地面小石子
-  ctx.fillStyle = 'rgba(0,0,0,.16)';
-  iterSeg(92, 1.05, (x, idx) => {
-    ctx.beginPath();
-    ctx.ellipse(x + 30 + hash(idx*7)*40, GY + 14 + hash(idx*3)*22, 7, 4, 0, 0, 7);
+  ctx.fillStyle = PAL.trunk;
+  ctx.beginPath(); for (const [x,y,w,h] of trunks) ctx.rect(x, y, w, h); ctx.fill();
+  ctx.fillStyle = PAL.tree;
+  ctx.beginPath();
+  for (const [cx,cy,r] of canopies){ ctx.moveTo(cx + r, cy); ctx.arc(cx, cy, r, 0, 7); }
+  for (const [cx,cy,r] of bushes){ ctx.moveTo(cx + r, cy); ctx.arc(cx, cy, r, 0, 7); }
+  ctx.fill();
+  ctx.strokeStyle = PAL.tree; ctx.lineWidth = 2.5;
+  ctx.beginPath(); for (const [sx,sy] of stems){ ctx.moveTo(sx,sy); ctx.lineTo(sx, sy - 13); } ctx.stroke();
+  for (const col in treeFlowers){
+    ctx.fillStyle = col; ctx.beginPath();
+    for (const [fx,fy] of treeFlowers[col]){ ctx.moveTo(fx + 3.4, fy); ctx.arc(fx, fy, 3.4, 0, 7); }
     ctx.fill();
+  }
+  for (const col in petals){
+    ctx.fillStyle = col; ctx.beginPath();
+    for (const [px,py] of petals[col])
+      for (let p = 0; p < 5; p++){
+        const a = p * Math.PI * 2 / 5;
+        ctx.moveTo(px + Math.cos(a)*5 + 3.4, py + Math.sin(a)*5);
+        ctx.arc(px + Math.cos(a)*5, py + Math.sin(a)*5, 3.4, 0, 7);
+      }
+    ctx.fill();
+  }
+  ctx.fillStyle = '#fff3bf'; ctx.beginPath();
+  for (const [cx,cy] of centers){ ctx.moveTo(cx + 3, cy); ctx.arc(cx, cy, 3, 0, 7); }
+  ctx.fill();
+  // 地面小石子：单路径批量
+  ctx.fillStyle = 'rgba(0,0,0,.16)';
+  ctx.beginPath();
+  iterSeg(92, 1.05, (x, idx) => {
+    const cx = x + 30 + hash(idx*7)*40, cy = GY + 14 + hash(idx*3)*22;
+    ctx.moveTo(cx + 7, cy);
+    ctx.ellipse(cx, cy, 7, 4, 0, 0, 7);
   });
+  ctx.fill();
 }
-function drawTufts(){ // 最前景草丛（更快视差）
+function drawTufts(){ // 最前景草丛（更快视差）：单条路径一次描边
   ctx.strokeStyle = PAL.night > 0.5 ? 'rgba(10,40,20,.8)' : 'rgba(30,90,30,.75)';
   ctx.lineWidth = 3; ctx.lineCap = 'round';
+  ctx.beginPath();
   iterSeg(66, 1.3, (x, idx) => {
     const gx = x + hash(idx*11) * 40, gy = H - 2;
     for (let b = -1; b <= 1; b++){
-      ctx.beginPath();
       ctx.moveTo(gx + b*5, gy);
       ctx.quadraticCurveTo(gx + b*7, gy - 8, gx + b*10, gy - 13 - hash(idx+b)*6);
-      ctx.stroke();
     }
   });
+  ctx.stroke();
 }
+let vigGrad = null, redGrad = null;
 function drawVignette(){
-  const vg = ctx.createRadialGradient(W/2, H/2, H*0.55, W/2, H/2, H*0.95);
-  vg.addColorStop(0, 'rgba(0,0,0,0)');
-  vg.addColorStop(1, 'rgba(0,0,0,.2)');
-  ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+  if (!vigGrad){
+    vigGrad = ctx.createRadialGradient(W/2, H/2, H*0.55, W/2, H/2, H*0.95);
+    vigGrad.addColorStop(0, 'rgba(0,0,0,0)');
+    vigGrad.addColorStop(1, 'rgba(0,0,0,.2)');
+  }
+  ctx.fillStyle = vigGrad; ctx.fillRect(0, 0, W, H);
 }
 
 /* =====================================================
@@ -788,6 +858,7 @@ function updatePlayer(dt){
     parts.push({type:'line', x:W+10, y:rand(GY-220, GY-10), vx:-speed*1.6, vy:0, life:0.4, dur:0.4});
 }
 
+let bodyGrad = null;
 function drawPlayer(){
   // 影子
   const airK = clamp(1 - (GY - p.y) / 260, 0.25, 1);
@@ -815,9 +886,12 @@ function drawPlayer(){
     rr(fx - 9, fy - 6, 18, 12, 6); ctx.fill(); ctx.stroke();
   }
   // 身体
-  const bodyG = ctx.createLinearGradient(0, -58, 0, 0);
-  bodyG.addColorStop(0, '#ffe066'); bodyG.addColorStop(1, '#ffa94d');
-  ctx.fillStyle = bodyG;
+  // 身体（渐变已缓存）
+  if (!bodyGrad){
+    bodyGrad = ctx.createLinearGradient(0, -58, 0, 0);
+    bodyGrad.addColorStop(0, '#ffe066'); bodyGrad.addColorStop(1, '#ffa94d');
+  }
+  ctx.fillStyle = bodyGrad;
   ctx.beginPath(); ctx.ellipse(0, -29, 27, 29, 0, 0, 7); ctx.fill(); ctx.stroke();
 
   // 派对帽（随动作摇摆）
@@ -1136,10 +1210,11 @@ function drawStarItem(s){
   const pul = 1 + Math.sin(time * 5 + s.ph) * 0.12;
   ctx.save();
   ctx.translate(s.x, s.y + Math.sin(time * 3 + s.ph) * 5);
-  const gg = ctx.createRadialGradient(0, 0, 2, 0, 0, 26 * pul);
-  gg.addColorStop(0, 'rgba(255,220,80,.5)'); gg.addColorStop(1, 'rgba(255,220,80,0)');
-  ctx.fillStyle = gg;
+  // 光晕：两层圆代替径向渐变
+  ctx.fillStyle = 'rgba(255,220,80,.12)';
   ctx.beginPath(); ctx.arc(0, 0, 26 * pul, 0, 7); ctx.fill();
+  ctx.fillStyle = 'rgba(255,220,80,.20)';
+  ctx.beginPath(); ctx.arc(0, 0, 15 * pul, 0, 7); ctx.fill();
   ctx.rotate(time * 1.8 + s.ph);
   starPath(0, 0, 14 * pul, 6.2 * pul, 0);
   ctx.fillStyle = '#ffd43b'; ctx.fill();
@@ -1538,29 +1613,47 @@ function render(){
     ctx.fillStyle = `hsla(${(time*300)%360},95%,60%,${rainbowT * 0.16})`;
     ctx.fillRect(0, 0, W, H);
   }
-  // 死亡红晕
+  // 死亡红晕（渐变缓存，透明度随 redF 变化用 globalAlpha 实现）
   if (redF > 0){
-    const rg = ctx.createRadialGradient(W/2, H/2, H*0.3, W/2, H/2, H*0.85);
-    rg.addColorStop(0, 'rgba(255,40,40,0)');
-    rg.addColorStop(1, `rgba(255,40,40,${clamp(redF,0,1) * 0.45})`);
-    ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H);
+    if (!redGrad){
+      redGrad = ctx.createRadialGradient(W/2, H/2, H*0.3, W/2, H/2, H*0.85);
+      redGrad.addColorStop(0, 'rgba(255,40,40,0)');
+      redGrad.addColorStop(1, 'rgba(255,40,40,.45)');
+    }
+    ctx.globalAlpha = clamp(redF, 0, 1);
+    ctx.fillStyle = redGrad; ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 1;
   }
   drawVignette();
   ctx.restore();
 
-  // HUD
-  elSc.textContent = Math.floor(score);
-  elSt.textContent = starsGot;
-  elSpd.textContent = '×' + (speed / BASE_SPEED).toFixed(1);
+  // HUD（仅数值变化时才写DOM，避免每帧重排耗电）
+  const scI = Math.floor(score);
+  if (scI !== hudCache.sc){ hudCache.sc = scI; elSc.textContent = scI; }
+  if (starsGot !== hudCache.st){ hudCache.st = starsGot; elSt.textContent = starsGot; }
+  const spdTxt = '×' + (speed / BASE_SPEED).toFixed(1);
+  if (spdTxt !== hudCache.spd){ hudCache.spd = spdTxt; elSpd.textContent = spdTxt; }
 }
 
 /* ---------- 主循环 ---------- */
-let last = performance.now();
+let last = performance.now(), fpsAvg = 60, qLastCheck = 0;
+const hudCache = { sc: -1, st: -1, spd: '' };
 function frame(now){
-  const dt = Math.min(0.033, (now - last) / 1000);
+  const rawDt = (now - last) / 1000;
+  const dt = Math.min(0.033, rawDt);
   last = now;
-  if (!paused) update(dt);
-  render();
+  // 帧率滚动平均 → 自适应画质
+  fpsAvg += (1 / Math.max(rawDt, 1e-4) - fpsAvg) * 0.04;
+  if (now - qLastCheck > 2500){
+    qLastCheck = now;
+    if (state === 'play' && !paused && fpsAvg < 45 && qLevel < QSCALE.length - 1){
+      qLevel++; applyRes(); fpsAvg = 60;   // 重置均值避免连跳两档
+    }
+  }
+  // 省电模式：菜单/暂停/结算展示期降为30fps；暂停时完全冻结画面不重绘
+  const idleish = state === 'menu' || paused || (state === 'dead' && goShown);
+  if (idleish && rawDt < 0.03) return requestAnimationFrame(frame);
+  if (!paused){ update(dt); render(); }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
