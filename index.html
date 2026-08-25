@@ -55,7 +55,9 @@
   .screen.hide{opacity:0;pointer-events:none}
   .screen>*{flex-shrink:0}
   /* 弹性上下占位：内容放得下时垂直居中；放不下时自动贴顶+可滚动，底部按钮永不被裁切 */
-  .screen::before,.screen::after{content:'';flex:1 1 0}
+  .screen::before,.screen::after{content:'';flex:1 1 0;min-height:6px}
+  /* 卡片弹入动画改为不位移的缩放，避免与滚动容器冲突导致顶部被裁 */
+  @keyframes pop{from{transform:scale(.72);opacity:0}to{transform:scale(1);opacity:1}}
   /* 容器查询：游戏视口偏矮时(横屏手机)压缩结算卡，尽量一屏放下 */
   #wrap{container-type:size}
   @container (max-height:520px){
@@ -209,6 +211,16 @@
     }
     #hud{top:max(16px, env(safe-area-inset-left), env(safe-area-inset-right))}
   }
+  /* 竖屏时底部小提示：横屏体验更好（不影响游戏，仅菜单/结算页可见度更高） */
+  #rotateTip{
+    display:none;position:absolute;bottom:max(6px, env(safe-area-inset-bottom));left:0;right:0;
+    text-align:center;font-size:11px;color:rgba(255,255,255,.75);
+    text-shadow:0 1px 2px rgba(0,0,0,.4);z-index:6;pointer-events:none;letter-spacing:.5px;
+  }
+  @media (orientation:portrait) and (pointer:coarse){
+    #rotateTip{display:block}
+    .screen{padding-bottom:26px}
+  }
   @media (display-mode:fullscreen){
     #fsBtn{display:none}
   }
@@ -339,6 +351,8 @@
     </div>
     <button id="lbBackBtn" class="btn small">返回菜单</button>
   </div>
+
+  <div id="rotateTip">↻ 横屏体验感更佳哦</div>
 
   <div id="credit">趣味游戏 · 祝你玩得开心</div>
 </div>
