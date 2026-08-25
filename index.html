@@ -54,11 +54,29 @@
   }
   .screen.hide{opacity:0;pointer-events:none}
   .screen>*{flex-shrink:0}
-  @supports (justify-content: safe center){
-    .screen{justify-content:safe center}
-  }
-  @media (max-height:560px){
-    .screen{justify-content:flex-start}
+  /* 弹性上下占位：内容放得下时垂直居中；放不下时自动贴顶+可滚动，底部按钮永不被裁切 */
+  .screen::before,.screen::after{content:'';flex:1 1 0}
+  /* 容器查询：游戏视口偏矮时(横屏手机)压缩结算卡，尽量一屏放下 */
+  #wrap{container-type:size}
+  @container (max-height:520px){
+    .screen{gap:7px;padding:8px}
+    .card{padding:12px;border-radius:14px}
+    .card h2{font-size:18px;margin:0 0 2px}
+    #goMsg{font-size:11.5px;margin-bottom:4px}
+    .stats{gap:5px;margin-bottom:6px}
+    .stat{padding:3px 8px;min-width:62px}
+    .stat .lab{font-size:9px}
+    .stat .val{font-size:15px}
+    .field label{display:none}
+    .card input[type=text]{padding:6px 9px;font-size:13px;border-width:2px}
+    .checkline{margin:3px 0;font-size:11px}
+    #saveScoreBtn{font-size:13px;padding:8px 14px}
+    #submitBox{margin-top:5px}
+    .row{gap:6px}
+    .btn{padding:10px 20px;font-size:14px}
+    .btn.small{padding:7px 14px;font-size:12px}
+    #subtitle{font-size:12px}
+    #keysTouch,#tip{font-size:11px}
   }
 
   /* ---------- 标题 ---------- */
@@ -239,11 +257,11 @@
         <div class="row" style="margin-bottom:6px">
           <div class="field">
             <label for="lbName">名字（留空则匿名）</label>
-            <input type="text" id="lbName" maxlength="12" placeholder="输入你的大名" list="nameList">
+            <input type="text" id="lbName" maxlength="12" placeholder="名字（留空则匿名）" list="nameList">
           </div>
           <div class="field">
             <label for="lbNote">备注（可选）</label>
-            <input type="text" id="lbNote" maxlength="24" placeholder="比如：手滑了 / 超常发挥">
+            <input type="text" id="lbNote" maxlength="24" placeholder="备注（可选）">
           </div>
         </div>
         <datalist id="nameList"></datalist>
@@ -1226,8 +1244,22 @@ function resetRun(){
   resetSubmitUI();
   newStuffAnnounced = false;
 }
+/* 手机端：开始游戏时尝试全屏+锁定横屏，避免系统自动旋转打断对局
+   （Android 支持最好；iOS 的 Safari 不支持网页全屏/锁向，会静默跳过，
+    由 CSS 旋转方案兑底保证竖屏也能正常玩） */
+async function enterGameMode(){
+  try{
+    if (!matchMedia('(pointer:coarse)').matches) return;
+    if (!document.fullscreenElement && document.documentElement.requestFullscreen)
+      await document.documentElement.requestFullscreen();
+    if (screen.orientation && screen.orientation.lock)
+      await screen.orientation.lock('landscape');
+  }catch(e){ /* 桌面端或不支持的环境直接忽略 */ }
+}
 function startGame(){
-  ac(); resetRun();
+  ac();
+  enterGameMode();
+  resetRun();
   state = 'play'; paused = false;
   scrMenu.classList.add('hide'); scrGO.classList.add('hide'); scrPause.classList.add('hide');
   sfxClick();
