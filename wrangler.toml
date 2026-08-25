@@ -1,19 +1,7 @@
-# Cloudflare Workers 配置（配合 worker.js 使用）
-# 部署：wrangler deploy
-# 注意：本文件同时会被 Pages 构建系统读到，
-#       pages_build_output_dir 指明 Pages 只发布静态根目录，不会去动 worker.js
-
-name = "quwei-game-lb"
-main = "worker.js"
+# 游戏本体部署配置：Workers 静态资产模式
+# Git 连接的构建命令 npx wrangler deploy 会把仓库根目录作为静态网站发布
+name = "funny-jump"
 compatibility_date = "2024-09-01"
 
-pages_build_output_dir = "."
-compatibility_flags = ["nodejs_compat"]
-
-[[kv_namespaces]]
-binding = "LB"
-id = "把 wrangler kv namespace create LB 输出的 id 填到这里"
-
-# 可选：管理密钥（用于 GET /admin/clear?key=xxx 清空榜单）
-# [vars]
-# ADMIN_KEY = "改成你自己的密码"
+[assets]
+directory = "."

@@ -50,8 +50,16 @@
     gap:14px;text-align:center;z-index:10;padding:16px;
     background:rgba(20,12,40,.35);backdrop-filter:blur(2px);
     transition:opacity .25s;
+    overflow-y:auto;
   }
   .screen.hide{opacity:0;pointer-events:none}
+  .screen>*{flex-shrink:0}
+  @supports (justify-content: safe center){
+    .screen{justify-content:safe center}
+  }
+  @media (max-height:560px){
+    .screen{justify-content:flex-start}
+  }
 
   /* ---------- 标题 ---------- */
   #title{display:flex;gap:6px;font-size:clamp(40px,8.5vw,84px);font-weight:900;line-height:1;
@@ -107,10 +115,11 @@
 
   /* ---------- 暂停按钮 / 排行榜表单 ---------- */
   .field label{display:block;font-size:11px;color:#9a8a76;font-weight:bold;margin-bottom:3px;text-align:left}
+  .field{flex:1 1 140px;min-width:0}
   .card input[type=text]{
     font-family:inherit;font-size:14px;padding:8px 12px;border-radius:10px;
     border:3px solid var(--yellow);outline:none;background:#fff;color:var(--ink);
-    width:min(220px,42vw);
+    width:100%;
   }
   .card input[type=text]:focus{border-color:var(--pink)}
   .checkline{display:flex;align-items:center;justify-content:center;gap:6px;font-size:13px;color:#6b5b4a;font-weight:bold;margin:8px 0}
@@ -160,22 +169,29 @@
       right:max(8px,env(safe-area-inset-right));gap:5px;
     }
     .chip{padding:5px 10px;font-size:11px}
-    #muteBtn,#pauseBtn{width:38px;height:38px;font-size:14px}
+    #muteBtn,#pauseBtn,#fsBtn{width:38px;height:38px;font-size:14px}
     #pauseBtn{font-size:10px}
-    .btn{padding:12px 30px}
-    .btn.small{padding:8px 20px}
-    .card{padding:16px 16px;border-radius:18px}
-    .card input[type=text]{width:min(250px,76vw)}
-    #submitBox .row{flex-direction:column;gap:8px}
-    .stat{padding:6px 10px;min-width:74px}
-    .stat .val{font-size:18px}
+    .btn{padding:11px 24px;font-size:15px}
+    .btn.small{padding:8px 18px;font-size:13px}
+    .screen{gap:10px;padding:10px}
+    .card{padding:14px;border-radius:16px}
+    .card h2{font-size:19px;margin-bottom:2px}
+    #goMsg{font-size:12px;margin-bottom:6px}
+    .stats{gap:6px;margin-bottom:8px}
+    .stat{padding:5px 9px;min-width:72px}
+    .stat .val{font-size:17px}
+    #submitBox{margin-top:8px}
+    .card input[type=text]{font-size:16px;padding:7px 10px}
+    .checkline{margin:5px 0;font-size:12px}
+    #saveScoreBtn{width:100%}
+    .row{gap:8px}
     .lb-row{font-size:12.5px;gap:7px;padding:6px 7px}
     .lb-name{min-width:60px;max-width:86px}
     .lb-note{font-size:11px}
     .lb-date{display:none}
     #keys{display:none}
     #keysTouch{display:block}
-    #lbListWrap{padding:14px}
+    #lbListWrap{padding:12px}
   }
 </style>
 </head>
@@ -234,7 +250,7 @@
         <div class="checkline">
           <input type="checkbox" id="lbAnon"><label for="lbAnon">匿名提交</label>
         </div>
-        <button id="saveScoreBtn" class="btn pink" style="animation:none;font-size:15px;padding:9px 26px">把这次成绩记入排行榜</button>
+        <button id="saveScoreBtn" class="btn pink" style="animation:none">把这次成绩记入排行榜</button>
         <div id="savedTip" style="display:none;font-size:13px;color:#2f9e44;font-weight:bold;margin-top:4px"></div>
       </div>
       <div class="row" style="margin-top:12px">

@@ -1,0 +1,7 @@
+name = "quwei-game-lb"
+main = "worker.js"
+compatibility_date = "2024-09-01"
+
+[[kv_namespaces]]
+binding = "LB"
+id = "555450476cb14b10ba45b3e44342ed1b"

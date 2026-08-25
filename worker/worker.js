@@ -53,6 +53,10 @@ export default {
       return json({ ok: true });
     }
 
+    // 根路径：友好提示（避免浏览器直接访问时看到 404）
+    if (url.pathname === '/')
+      return json({ service: '趣味游戏 · 云端排行榜', usage: 'GET /scores 拉取榜单, POST /scores 提交成绩' });
+
     return new Response('Not found', { status: 404, headers: CORS });
   },
 };

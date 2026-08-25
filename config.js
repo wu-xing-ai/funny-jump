@@ -8,7 +8,7 @@ window.GAME_CONFIG = {
      - 留空 '' ：本地模式，记录只保存在各自主的浏览器里
      - 填地址  ：所有人的成绩都会汇总到云端榜单
      例如：'https://quwei-game-lb.你的子域名.workers.dev'  */
-  LEADERBOARD_API: '',
+  LEADERBOARD_API: 'https://quwei-game-lb.wujiaxin3060904182.workers.dev',
 
   /* 常用玩家名单：会出现在结算页“名字”输入框的下拉建议里。
      有人用新名字提交过之后，会自动记在他自己的浏览器里；

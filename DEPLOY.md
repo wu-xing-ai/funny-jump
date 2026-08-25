@@ -8,7 +8,7 @@
 |---|---|---|
 | `index.html` | 游戏本体（含本地排行榜） | ✅ 必须 |
 | `config.js` | 配置：玩家名单、云端接口地址 | ✅ 建议 |
-| `worker.js` + `wrangler.toml` | 云端排行榜服务（可选） | 只部署 Worker 时用 |
+| `worker/` 目录（worker.js + wrangler.toml） | 云端排行榜服务，KV 已配置并部署上线 | 改动后需 cd worker && wrangler deploy |
 
 ---
 
@@ -33,61 +33,37 @@
 
 ---
 
-## 三、开启全服共享榜（Worker + KV）
+## 三、云端排行榜（已完成部署）
 
-前提：装好 [Node.js](https://nodejs.org)，然后在命令行执行：
+Worker 和 KV 已经创建并绑定完毕：
 
-```bash
-# 1. 安装 Cloudflare 命令行工具
-npm install -g wrangler
+- 接口地址已写入 `config.js` 的 `LEADERBOARD_API`（形如 `https://quwei-game-lb.xxx.workers.dev`）
+- Worker 源码：`worker/worker.js`
+- Worker 配置：`worker/wrangler.toml`（KV 命名空间 id 已填好）
 
-# 2. 登录（会弹浏览器授权）
-wrangler login
+游戏内置混合模式：有网时成绩自动传云端并拉取全服榜单；断网时存本地队列，恢复联网自动补传，无需任何手动操作。
 
-# 3. 创建一个 KV 存储桶（存榜单数据用）
-wrangler kv namespace create LB
-```
+### 以后想更新 Worker
 
-第 3 步会输出类似这样的内容：
-
-```toml
-[[kv_namespaces]]
-binding = "LB"
-id = "abcdef1234567890..."
-```
-
-把 `id = "..."` 里的字符串复制，打开 `wrangler.toml`，替换进去，然后在本目录执行：
+修改 `worker/worker.js` 后执行：
 
 ```bash
+cd worker
 wrangler deploy
 ```
 
-成功后会输出你的专属接口地址，例如：
+### 管理云端榜单（清空记录）
 
-```text
-https://quwei-game-lb.你的子域.workers.dev
-```
-
-最后打开 `config.js`，把它填进去：
-
-```js
-LEADERBOARD_API: 'https://quwei-game-lb.你的子域.workers.dev',
-```
-
-重新部署一次 Pages（游戏代码不用改，只改了 `config.js`），完成——现在所有人玩的就是同一个榜单了。
-
-### 管理云端榜单
-
-在 `wrangler.toml` 里取消注释并设置管理密码，重新 `wrangler deploy`：
+在 `worker/wrangler.toml` 里加上管理密码后重新部署：
 
 ```toml
 [vars]
 ADMIN_KEY = "你的密码"
 ```
 
-之后浏览器访问 `https://quwei-game-lb.你的子域.workers.dev/admin/clear?key=你的密码` 即可清空云端记录。
+浏览器访问 `https://你的worker地址/admin/clear?key=你的密码` 即可清空云端记录。
 
-> 免费额度完全够用：KV 每天 10 万次读 / 1000 次写，小游戏绰绰有余。
+> 免费额度完全够用：KV 每天 10 万次读 / 1000 次写。
 
 ---
 

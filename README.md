@@ -2,7 +2,7 @@
 
 > 一个零依赖的单文件 HTML 跑酷小游戏 —— 控制呆萌的豆豆跳过障碍、收集星星，活得越久分越高！
 
-**▶ 在线游玩：<https://funny-jump.pages.dev>**
+**▶ 在线游玩：<https://jump.wuxinw.dpdns.org>**（备用：<https://funny-jump.pages.dev>）
 
 手机竖屏也能玩（画面自动旋转 90°），支持触屏与刘海屏。
 
@@ -53,8 +53,7 @@
 ```text
 index.html        游戏本体（全部逻辑都在这一个文件里）
 config.js         配置文件：玩家名单、云端排行榜接口地址
-worker.js         可选组件：云端排行榜 Worker（配合 Cloudflare KV）
-wrangler.toml     Worker 部署配置
+worker/           云端排行榜 Worker（worker.js + wrangler.toml，KV 已配置好）
 .github/workflows 自动部署工作流（push 到 main 即发布）
 DEPLOY.md         部署与打包详细教程
 ```
