@@ -51,7 +51,7 @@ export default {
     if (url.pathname === '/admin' && env.ADMIN_KEY) {
       if (url.searchParams.get('key') !== env.ADMIN_KEY)
         return new Response(adminLoginHtml(), { headers: { ...CORS, 'Content-Type': 'text/html; charset=utf-8' } });
-      const list = (await env.LB.get('scores', 'json')) || [];
+      const list = ((await env.LB.get('scores', 'json')) || []).filter(e => e && typeof e === 'object');
       return new Response(adminPageHtml(list), { headers: { ...CORS, 'Content-Type': 'text/html; charset=utf-8' } });
     }
     if (url.pathname === '/admin/save' && request.method === 'POST' && env.ADMIN_KEY) {
@@ -138,8 +138,8 @@ tr:hover{background:#faf6ff}
 <div class="bar">
   <button id="save">💾 保存全部修改</button>
   <button id="reload">↩ 放弃修改并刷新</button>
-  <a href="/admin/clear?key=${encodeURIComponent(new URL(location.href).searchParams.get('key'))}"
-     onclick="return confirm('确定清空整个云端榜单吗？')"><button style="background:#fa5252;color:#fff;border:none;border-radius:8px;padding:10px 22px;font-size:15px;cursor:pointer">🗑 清空全部</button></a>
+  <a href="/admin/clear?key=' + encodeURIComponent(KEY) + "
+     onclick=\"return confirm('确定清空整个云端榜单吗？')\"><button style=\"background:#fa5252;color:#fff;border:none;border-radius:8px;padding:10px 22px;font-size:15px;cursor:pointer\">🗑 清空全部</button></a>
   <span id="tip"></span>
 </div>
 <script>
