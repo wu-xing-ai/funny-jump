@@ -8,7 +8,7 @@
 |---|---|---|
 | `index.html` | 游戏本体（含本地排行榜） | ✅ 必须 |
 | `config.js` | 配置：玩家名单、云端接口地址 | ✅ 建议 |
-| `worker/` 目录（worker.js + wrangler.toml） | 云端排行榜服务，KV 已配置并部署上线 | 改动后需 cd worker && wrangler deploy |
+| `worker.js` + `wrangler.toml` | 云端排行榜接口与 KV 绑定（已配置） | ✅ 与 index.html 一起上传 |
 
 ---
 
@@ -33,35 +33,34 @@
 
 ---
 
-## 三、云端排行榜（已完成部署）
+## 三、云端排行榜（已部署 · 与游戏同域）
 
-Worker 和 KV 已经创建并绑定完毕：
+排行榜接口直接跑在 funny-jump 这个 Worker 里，与游戏页面同域名：
 
-- 接口地址已写入 `config.js` 的 `LEADERBOARD_API`（形如 `https://quwei-game-lb.xxx.workers.dev`）
-- Worker 源码：`worker/worker.js`
-- Worker 配置：`worker/wrangler.toml`（KV 命名空间 id 已填好）
+- `GET/POST /scores` —— 拉取/提交成绩（前端已自动使用，无需额外配置）
+- 数据存放在 Cloudflare KV（命名空间 id 见 `wrangler.toml`），重新部署不会丢数据
+- 前端仍是混合模式：有网自动同步云端，断网存本地队列、联网自动补传
 
-游戏内置混合模式：有网时成绩自动传云端并拉取全服榜单；断网时存本地队列，恢复联网自动补传，无需任何手动操作。
+### 改动接口代码后如何发布
 
-### 以后想更新 Worker
-
-修改 `worker/worker.js` 后执行：
+修改根目录 `worker.js` 后，推送到 GitHub 会自动部署；也可以本地立即发布：
 
 ```bash
-cd worker
 wrangler deploy
 ```
 
-### 管理云端榜单（清空记录）
+### 清空云端记录
 
-在 `worker/wrangler.toml` 里加上管理密码后重新部署：
+在 `wrangler.toml` 加上管理密码并重新部署：
 
 ```toml
 [vars]
 ADMIN_KEY = "你的密码"
 ```
 
-浏览器访问 `https://你的worker地址/admin/clear?key=你的密码` 即可清空云端记录。
+浏览器访问 `https://你的域名/admin/clear?key=你的密码` 即可清空。
+
+> 免费额度完全够用：KV 每天 10 万次读 / 1000 次写。
 
 > 免费额度完全够用：KV 每天 10 万次读 / 1000 次写。
 

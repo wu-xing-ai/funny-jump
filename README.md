@@ -53,7 +53,8 @@
 ```text
 index.html        游戏本体（全部逻辑都在这一个文件里）
 config.js         配置文件：玩家名单、云端排行榜接口地址
-worker/           云端排行榜 Worker（worker.js + wrangler.toml，KV 已配置好）
+worker.js         云端排行榜接口（/scores，与游戏页面同域）
+wrangler.toml     部署配置（含 KV 数据库绑定，重新部署不丢数据）
 .github/workflows 自动部署工作流（push 到 main 即发布）
 DEPLOY.md         部署与打包详细教程
 ```

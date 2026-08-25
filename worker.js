@@ -1,18 +1,12 @@
 /**
- * 趣味游戏 · 云端排行榜 Worker（可选组件）
+ * 趣味游戏 · 主 Worker（静态网站 + 云端排行榜 API 一体）
  * ------------------------------------------------
- * 只有想让“所有玩家共享一个榜单”时才需要部署它。
- * 只用本地排行榜的话，忽略这个文件即可。
- *
- * 部署步骤：
- *   1. 安装 wrangler：npm install -g wrangler
- *   2. wrangler login
- *   3. 创建 KV：wrangler kv namespace create LB
- *      把输出的 id 填进 wrangler.toml
- *   4. wrangler deploy
- *   5. 把得到的 workers.dev 地址填进 config.js 的 LEADERBOARD_API
+ * 静态资源由 wrangler.toml 的 [assets] 自动托管；
+ * 本脚本只处理排行榜接口，其余路径回落到静态资产：
+ *   GET  /scores            拉取榜单（?limit=N，默认50，最大100）
+ *   POST /scores            提交成绩 {name, score, note, anon}
+ *   GET  /admin/clear?key=  清空榜单（需在配置中设置 ADMIN_KEY）
  */
-
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type',
@@ -46,18 +40,15 @@ export default {
       }
     }
 
-    // 简易管理接口：清空榜单（需在 wrangler.toml 配置 ADMIN_KEY）
+    // 管理接口：清空榜单（需在 wrangler.toml 配置 ADMIN_KEY）
     if (url.pathname === '/admin/clear' && env.ADMIN_KEY
         && url.searchParams.get('key') === env.ADMIN_KEY) {
       await env.LB.delete('scores');
       return json({ ok: true });
     }
 
-    // 根路径：友好提示（避免浏览器直接访问时看到 404）
-    if (url.pathname === '/')
-      return json({ service: '趣味游戏 · 云端排行榜', usage: 'GET /scores 拉取榜单, POST /scores 提交成绩' });
-
-    return new Response('Not found', { status: 404, headers: CORS });
+    // 其余路径交给静态资产服务（游戏页面等）
+    return env.ASSETS.fetch(request);
   },
 };
 

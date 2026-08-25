@@ -1,5 +1,6 @@
 .github
-worker
 一键发布.bat
 .assetsignore
 .wrangler
+/worker.js
+/wrangler.toml
