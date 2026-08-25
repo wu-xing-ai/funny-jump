@@ -58,7 +58,26 @@ wrangler deploy
 ADMIN_KEY = "你的密码"
 ```
 
-浏览器访问 `https://你的域名/admin/clear?key=你的密码` 即可清空。
+浏览器访问 `https://你的域名/admin/clear?key=你的密码` 即可一键清空。
+
+### 修改/删除单条记录（不清空）
+
+榜单数据存在 KV 的 `scores` 键里，是一个 JSON 数组。用 wrangler 登录后可直接读写：
+
+```bash
+# 1. 导出现有数据到本地文件
+npx wrangler kv key get --binding LB scores > lb.json
+#    （或加 --remote 操作线上；文件是 JSON 数组，每条形如：
+#      {"name":"无敌程五","anon":false,"score":165,"note":"...","ts":1787678782620} ）
+
+# 2. 用任意编辑器打开 lb.json，随意改名 / 改备注 / 改分数 / 删掉整行记录
+
+# 3. 写回（注意必须带 --remote，否则只改了本地副本）
+npx wrangler kv key put --binding LB scores --path lb.json --remote
+```
+
+> 修改后立即生效；前端每次打开排行榜都会拉最新数据。
+> Windows 用户建议在 Git Bash 里执行上述命令，避免 PowerShell 的编码坑（UTF-16 问题）。
 
 > 免费额度完全够用：KV 每天 10 万次读 / 1000 次写。
 
