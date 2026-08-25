@@ -162,6 +162,19 @@
   .lb-date{color:#b0a290;font-size:11px;flex-shrink:0}
   .lb-score{font-weight:900;color:#e8590c;min-width:52px;text-align:right;flex-shrink:0}
   .empty-lb{padding:34px 10px;color:#9a8a76;font-weight:bold;text-align:center}
+  #lbTabs{display:flex;gap:6px;justify-content:center;margin-bottom:10px}
+  .lb-tab{
+    font-family:inherit;font-weight:bold;font-size:clamp(12px,1.8vw,15px);
+    padding:7px 18px;border-radius:999px;border:2px solid #e8dcc0;
+    background:#fff;color:#9a8a76;cursor:pointer;transition:all .15s;
+  }
+  .lb-tab:hover{transform:translateY(-1px)}
+  .lb-tab.on{
+    background:linear-gradient(180deg,var(--yellow),#e8b00c);color:#6b4a00;
+    border-color:#d4a50a;box-shadow:0 2px 0 #b3860a;
+  }
+  .lb-tab:disabled{opacity:.45;cursor:not-allowed}
+  #lbFoot{display:flex;align-items:center;margin-top:10px}
 
   /* ---------- 手机端适配 ---------- */
   #keysTouch{display:none;font-size:clamp(13px,2vw,16px);background:rgba(0,0,0,.35);padding:6px 16px;border-radius:999px;line-height:1.7}
@@ -292,10 +305,16 @@
     <div id="lbListWrap">
       <div class="lb-head">
         <div class="lb-title">排行榜</div>
-        <button class="linkish" id="clearLbBtn">清空本地记录</button>
+      </div>
+      <div id="lbTabs">
+        <button class="lb-tab on" data-tab="local">📱 本地榜</button>
+        <button class="lb-tab" data-tab="cloud" style="display:none">☁️ 云端榜</button>
       </div>
       <div id="lbList"></div>
-      <div id="lbSrcTip" style="font-size:11px;color:#b0a290;margin-top:8px;text-align:center"></div>
+      <div id="lbFoot">
+        <span id="lbSrcTip" style="font-size:11px;color:#b0a290"></span>
+        <button class="linkish" id="clearLbBtn" style="flex-shrink:0;margin-left:auto">清空本地</button>
+      </div>
     </div>
     <button id="lbBackBtn" class="btn small">返回菜单</button>
   </div>
@@ -1668,28 +1687,54 @@ async function openLb(){
   refreshNameList();
   scrMenu.classList.add('hide');
   $('lbScr').classList.remove('hide');
-  renderLb(lbGetLocal());                 // 先展示本地，秒开
-  if (CFG.LEADERBOARD_API) await flushOutbox();   // 有网先把欠着的成绩补传
-  const remote = await apiGet();          // 再拉云端合并
-  if (remote.length){
-    const seen = new Set(), merged = [];
-    for (const e of [...lbGetLocal(), ...remote]){
-      const k = `${e.ts}|${e.score}|${e.name || ''}`;
-      if (seen.has(k)) continue;
-      seen.add(k);
-      merged.push({ name:e.name || '', score:e.score | 0, note:e.note || '', ts:e.ts || Date.now(), anon:!!e.anon });
-    }
-    merged.sort((a, b) => b.score - a.score);
-    lbSetLocal(merged);
-    renderLb(merged.slice(0, CFG.SHOW_TOP));
-    $('lbSrcTip').textContent = '已同步云端榜单' + (outboxGet().length ? '（有 ' + outboxGet().length + ' 条待补传）' : '');
-  } else if (CFG.LEADERBOARD_API){
-    $('lbSrcTip').textContent = navigator.onLine
-      ? '云端暂时连不上，当前显示本地记录'
-      : '当前离线，显示本地记录；联网后成绩会自动同步云端';
-  } else {
-    $('lbSrcTip').textContent = '本地模式：记录保存在这台设备上；部署 Worker 后可全服共享';
+  setLbTab('local');                       // 默认展示本地榜，秒开
+  const cloudBtn = $('cloudTabBtn');
+  if (!CFG.LEADERBOARD_API){               // 未配置云端接口：隐藏云端标签
+    cloudBtn.style.display = 'none';
+    return;
   }
+  cloudBtn.style.display = '';
+  cloudBtn.disabled = true;                // 拉取中先禁用，防抖
+  if (outboxGet().length) await flushOutbox();   // 有网先把欠着的成绩补传
+  const remote = await apiGet();           // 拉云端榜单缓存到变量
+  cloudBtn.disabled = false;
+  if (remote.length){
+    lbCloud = remote.map(e => ({
+      name:e.name || '', score:e.score | 0, note:e.note || '',
+      ts:e.ts || Date.now(), anon:!!e.anon,
+    })).sort((a, b) => b.score - a.score);
+    $('lbSrcTip').textContent = outboxGet().length
+      ? `已同步（${outboxGet().length} 条待补传）`
+      : '已同步云端数据';
+  } else {
+    $('lbSrcTip').textContent = navigator.onLine
+      ? '云端暂时连不上'
+      : '当前离线，联网后自动同步';
+  }
+  // 若用户在拉取期间已切到云端页，刷新显示
+  if (lbTab === 'cloud') renderLbTab();
+}
+let lbTab = 'local';                      // 当前展示哪个榜：local | cloud
+let lbCloud = [];                         // 云端榜单缓存
+function renderLbTab(){
+  const isLocal = lbTab === 'local';
+  renderLb(isLocal ? lbGetLocal() : lbCloud);
+  const el = $('lbSrcTip');
+  if (isLocal){
+    el.textContent = CFG.LEADERBOARD_API
+      ? '本机记录（提交过的也会存一份在这里）'
+      : '本地模式：记录保存在这台设备上；部署 Worker 后可全服共享';
+  } else {
+    el.textContent = lbCloud.length
+      ? '全服共享榜单，所有人可见'
+      : (navigator.onLine ? '云端还没有记录，快来抢占第一名！' : '当前离线，无法拉取云端榜单');
+  }
+}
+function setLbTab(tab){
+  lbTab = tab;
+  document.querySelectorAll('.lb-tab').forEach(b =>
+    b.classList.toggle('on', b.dataset.tab === tab));
+  renderLbTab();
 }
 function resetSubmitUI(){
   runSubmitted = false;
@@ -1751,12 +1796,18 @@ $('lbBackBtn').addEventListener('click', () => {
   scrMenu.classList.remove('hide');
 });
 $('clearLbBtn').addEventListener('click', () => {
-  if (confirm('确定清空本机保存的排行榜记录吗？（云端记录不受影响）')){
-    lbSetLocal([]);
-    renderLb([]);
-    $('lbSrcTip').textContent = '本地记录已清空';
+  if (confirm(lbTab === 'local'
+    ? '确定清空本机保存的排行榜记录吗？（云端记录不受影响）'
+    : '清空云端记录需要在 Worker 配置 ADMIN_KEY，本机记录不受影响。')){
+    if (lbTab === 'local'){
+      lbSetLocal([]);
+      renderLbTab();
+      $('lbSrcTip').textContent = '本地记录已清空';
+    }
   }
 });
+document.querySelectorAll('.lb-tab').forEach(b =>
+  b.addEventListener('click', () => { sfxClick(); setLbTab(b.dataset.tab); }));
 $('saveScoreBtn').addEventListener('click', submitScore);
 ['lbName', 'lbNote'].forEach(id => $(id).addEventListener('keydown', e => {
   if (e.key === 'Enter'){ e.preventDefault(); submitScore(); }
