@@ -93,6 +93,10 @@ function sanitize(b) {
 }
 
 /* ---------- 管理页（米白纸张 × 暗红强调 · 日系杂志 × Swiss Style） ---------- */
+function esc(s){
+  return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+const A_STYLE = `
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Noto+Serif+SC:wght@400;600;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -275,8 +279,3 @@ document.getElementById('clearAll').onclick = async () => {
 };
 </script></body></html>`;
 }
-`;
-
-fs.writeFileSync('worker.js', keep + NEW);
-console.log('重写完成, 新文件总行数:', (keep + NEW).split('
-').length);
