@@ -247,8 +247,8 @@ ${list.length ? `
   </div>
   <div class="bar" style="border-top:1px solid var(--line);padding-top:clamp(12px,2vw,20px)">
     <span class="kicker" style="margin:0">God Mode 无敌测试</span>
-    <button class="btn" id="godOn" style="border-color:var(--accent);color:var(--accent)">🛡 开启无敌</button>
-    <button class="btn" id="godOff">关闭无敌</button>
+    <button class="btn" id="godLaunch" style="border-color:var(--accent);color:var(--accent);font-weight:bold">🛡 启动无敌模式游戏</button>
+    <button class="btn" id="godEnd">结束无敌测试</button>
     <span id="godTip" style="font-family:var(--mono);font-size:11px;color:var(--ink-soft)"></span>
   </div>
   <footer><span>FUNNY JUMP — LEADERBOARD CONSOLE</span><span id="ftKey"></span></footer>
@@ -283,14 +283,46 @@ document.getElementById('clearAll').onclick = async () => {
   await fetch('/admin/clear?key=' + encodeURIComponent(KEY || ''));
   location.href = '/admin?key=' + encodeURIComponent(KEY || '');
 };
-/* ---- 无敌模式：向同浏览器的游戏页发送开关信号 ---- */
+/* ---- 无敌模式：在管理页内弹出游戏窗口，游戏自动进入无敌状态 ---- */
 function godTip(t){ document.getElementById('godTip').textContent = t; }
-function sendGod(on){
-  localStorage.setItem('funGame_god', on ? '1' : '0');
-  try{ const bc = new BroadcastChannel('funny_jump_admin'); bc.postMessage({type:'god', on}); }catch(e){}
-  godTip(on ? '已开启 → 切到游戏页即可生效' : '已关闭');
+document.getElementById('godLaunch').onclick = () => {
+  localStorage.setItem('funGame_god', '1');
+  const w = window.open('/index.html?god=1&t=' + Date.now(), 'godGame',
+    'width=980,height=600,left=80,top=60');
+  if (!w){
+    // 弹窗被拦截：降级为同页 iframe 面板
+    openIframeGame();
+  } else {
+    godTip('已弹出游窗（无敌中）· 关闭游窗或点「结束」即恢复');
+  }
+  try{ const bc = new BroadcastChannel('funny_jump_admin'); bc.postMessage({type:'god', on:true}); }catch(e){}
+};
+document.getElementById('godEnd').onclick = () => {
+  localStorage.setItem('funGame_god', '0');
+  try{ const bc = new BroadcastChannel('funny_jump_admin'); bc.postMessage({type:'god', on:false}); }catch(e){}
+  const fw = document.getElementById('godFrameWrap');
+  if (fw) fw.remove();
+  const w = window.open('', 'godGame');
+  if (w && !w.closed) w.close();
+  godTip('无敌测试已结束');
+};
+function openIframeGame(){
+  let wrap = document.getElementById('godFrameWrap');
+  if (wrap) { wrap.remove(); return; }
+  wrap = document.createElement('div');
+  wrap.id = 'godFrameWrap';
+  wrap.style.cssText = 'position:fixed;inset:0;z-index:999;background:rgba(28,26,23,.92);display:flex;flex-direction:column';
+  wrap.innerHTML =
+    '<div style="display:flex;gap:10px;align-items:center;padding:10px 16px;background:var(--accent);color:#f7f3ea">' +
+    '<b style="letter-spacing:.2em;font-size:13px">🛡 无敌测试进行中</b>' +
+    '<button id="godFrameEnd" style="margin-left:auto;padding:7px 18px;border:none;border-radius:6px;background:#f7f3ea;color:var(--accent);font-weight:bold;cursor:pointer">结束测试</button></div>' +
+    '<iframe src="/index.html?god=1" style="flex:1;border:none;width:100%"></iframe>';
+  document.body.appendChild(wrap);
+  document.getElementById('godFrameEnd').onclick = () => {
+    localStorage.setItem('funGame_god', '0');
+    wrap.remove();
+    godTip('无敌测试已结束');
+  };
 }
-document.getElementById('godOn').onclick = () => { sendGod(true); };
-document.getElementById('godOff').onclick = () => { sendGod(false); };
 </script></body></html>`;
 }

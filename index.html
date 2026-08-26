@@ -1682,7 +1682,8 @@ if (typeof BroadcastChannel !== 'undefined'){
   bc.onmessage = ev => { if (ev.data && ev.data.type === 'god') applyGodMode(ev.data.on); };
   window.__adminBC = bc;
 }
-godMode = localStorage.getItem('funGame_god') === '1';   // 启动时恢复上次状态
+godMode = localStorage.getItem('funGame_god') === '1' ||
+          new URL(location.href).searchParams.get('god') === '1';  // 启动时恢复/URL参数强制开启
 
 /* ---------- 输入 ---------- */
 function primaryAction(){
