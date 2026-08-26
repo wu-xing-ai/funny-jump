@@ -6,3 +6,5 @@ Thumbs.db
 
 # 私人文件不进公开仓库（微信/支付宝收款码等）
 /pay/
+kv_c.json
+add_diag.cjs
