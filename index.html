@@ -1780,7 +1780,7 @@ function outboxSet(a){
   try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(a)); } catch (e){}
 }
 async function flushOutbox(){
-  if (!CFG.LEADERBOARD_API) return;
+  if (!CFG.LEADERBOARD_API && !apiBase()) return;   // 双保险：完全未配置任何接口时跳过
   const box = outboxGet();
   if (!box.length) return;
   const remain = [];
@@ -1815,19 +1815,20 @@ function fmtDate(ts){
   const p2 = n => String(n).padStart(2, '0');
   return `${d.getMonth() + 1}月${d.getDate()}日 ${p2(d.getHours())}:${p2(d.getMinutes())}`;
 }
+function apiBase(){
+  return (CFG.LEADERBOARD_API || '').replace(/\/$/, '');   // 空 = 同源模式
+}
 async function apiGet(){
-  if (!CFG.LEADERBOARD_API) return [];
   try {
-    const r = await fetch(CFG.LEADERBOARD_API.replace(/\/$/, '') + '/scores?limit=100', { cache: 'no-store' });
+    const r = await fetch(apiBase() + '/scores?limit=100', { cache: 'no-store' });
     if (!r.ok) return [];
     const j = await r.json();
     return Array.isArray(j) ? j : [];
   } catch (e){ return []; }
 }
 async function apiPost(entry){
-  if (!CFG.LEADERBOARD_API) return false;
   try {
-    const r = await fetch(CFG.LEADERBOARD_API.replace(/\/$/, '') + '/scores', {
+    const r = await fetch(apiBase() + '/scores', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(entry),
@@ -1856,13 +1857,7 @@ async function openLb(){
   scrMenu.classList.add('hide');
   $('lbScr').classList.remove('hide');
   setLbTab('local');                       // 默认展示本地榜，秒开
-  const cloudBtn = $('cloudTabBtn');
-  if (!CFG.LEADERBOARD_API){
-    // 同源模式：接口就在自己域名 /scores，云端标签照常可用
-    cloudBtn.style.display = '';
-  } else {
-    cloudBtn.style.display = '';
-  }
+  $('cloudTabBtn').style.display = '';     // 云端标签始终显示（同源/跨域均可用）
   cloudBtn.disabled = true;                // 拉取中先禁用，防抖
   if (outboxGet().length) await flushOutbox();   // 有网先把欠着的成绩补传
   const remote = await apiGet();           // 拉云端榜单缓存到变量
