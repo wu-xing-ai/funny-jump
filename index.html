@@ -1902,7 +1902,8 @@ async function openLb(){
   scrMenu.classList.add('hide');
   $('lbScr').classList.remove('hide');
   setLbTab('local');                       // 默认展示本地榜，秒开
-  $('cloudTabBtn').style.display = '';     // 云端标签始终显示（同源/跨域均可用）
+  const cloudBtn = $('cloudTabBtn');       // 云端标签始终显示（同源/跨域均可用）
+  cloudBtn.style.display = '';
   cloudBtn.disabled = true;                // 拉取中先禁用，防抖
   if (outboxGet().length) await flushOutbox();   // 有网先把欠着的成绩补传
   const remote = await apiGet();           // 拉云端榜单缓存到变量
