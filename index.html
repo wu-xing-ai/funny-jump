@@ -964,6 +964,7 @@ function unlockPool(){
   if (score >= 380) pool.push(['bee', 2]);
   if (score >= 550) pool.push(['spike', 2]);
   if (score >= 3000) pool.push(['laser', 2], ['gate', 2], ['slime', 2], ['ufo', 2]);
+  if (score >= 800) pool.push(['river', 2]);   // 河流提前到800分解锁
   let tot = 0; pool.forEach(e => tot += e[1]);
   let r = Math.random() * tot;
   for (const [t, w] of pool){ if ((r -= w) <= 0) return t; }
@@ -990,6 +991,8 @@ function spawnObstacle(){
     obstacles.push({type:'slime', x:W+60, w:46, h:38, ph:rand(0, 7)});
   else if (type === 'ufo')
     obstacles.push({type:'ufo', x:W+60, cy:GY-115, r:19, ph:rand(0, 7), wsp:rand(2.6, 3.1)});
+  else if (type === 'river')
+    obstacles.push({type:'river', x:W+60, wide:false, w:0, ph:rand(0,7)});
   else
     obstacles.push({type:'spike', x:W+60, r:rand(23,30), rot:0});
 }
@@ -1136,12 +1139,12 @@ function drawObstacle(o){
     ctx.fillStyle = '#7048e8';
     rr(x, GY - 330, w, 220, 10); ctx.fill(); ctx.stroke();
     ctx.fillStyle = '#9775fa';
-    rr(x, GY - 34, w, 34, 8); ctx.fill(); ctx.stroke();
-    hazard(x, GY - 120, w, 12);
-    hazard(x, GY - 34, w, 11);
+    rr(x, GY - 30, w, 30, 8); ctx.fill(); ctx.stroke();
+    hazard(x, GY - 126, w, 12);
+    hazard(x, GY - 30, w, 10);
     // 缝隙提示灯（一闪一闪提醒你从这过）
     ctx.fillStyle = Math.floor(time * 5) % 2 ? '#ffd93d' : '#ff5d8f';
-    ctx.beginPath(); ctx.arc(x + w / 2, GY - 72, 5, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + w / 2, GY - 74, 5, 0, 7); ctx.fill();
     ctx.lineWidth = 3; ctx.stroke();
   }
   else if (o.type === 'slime'){
@@ -1169,6 +1172,33 @@ function drawObstacle(o){
     ctx.beginPath(); ctx.arc(11, -21, 2.8, 0, 7); ctx.fill();
     ctx.strokeStyle = '#2b6e35'; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.arc(1, -12, 4.5, 0.1 * Math.PI, 0.9 * Math.PI); ctx.stroke();
+    ctx.restore();
+  }
+  else if (o.type === 'river'){
+    if (!o.w) o.w = o.wide ? 300 : 170;
+    const x = o.x, w = o.w;
+    // 岸沿
+    ctx.lineWidth = 4; ctx.strokeStyle = '#3a2b20'; ctx.fillStyle = PAL.night > .5 ? '#3a5a40' : '#8a6b4a';
+    rr(x - 10, GY - 8, 12, 12, 4); ctx.fill(); ctx.stroke();
+    rr(x + w - 2, GY - 8, 12, 12, 4); ctx.fill(); ctx.stroke();
+    // 水面
+    const wg = gradCache['water'] ??= (() => { const g2 = ctx.createLinearGradient(0, GY, 0, H); g2.addColorStop(0,'#74c0fc'); g2.addColorStop(1,'#1971c2'); return g2; })();
+    ctx.fillStyle = wg;
+    ctx.fillRect(x, GY + 2, w, H - GY);
+    // 波纹
+    ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 2.5; ctx.lineCap='round';
+    ctx.beginPath();
+    for (let i = 0; i < 3; i++){
+      const wx = x + ((time * 60 + i * w / 3) % w);
+      const wy = GY + 14 + i * 16;
+      ctx.moveTo(wx, wy);
+      ctx.quadraticCurveTo(wx + 12, wy - 5, wx + 24, wy);
+    }
+    ctx.stroke();
+    // 提示牌: 单跳/双跳
+    ctx.save();
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(o.wide ? '2连跳' : '1跳', x + w/2, GY + 22);
     ctx.restore();
   }
   else if (o.type === 'ufo'){
@@ -1523,7 +1553,17 @@ function update(dt){
     if (spawnT <= 0){
       spawnObstacle();
       const diff = clamp((speed - BASE_SPEED) / (MAX_SPEED - BASE_SPEED), 0, 1);
-      spawnT = rand(lerp(1.1, 0.82, diff), lerp(1.65, 1.1, diff));
+      let gapMin = lerp(1.1, 0.82, diff);
+      // 高分时段: 危险组合(激光/闸门/UFO)之后强制加长间隔, 保证可通行
+      const last = obstacles[obstacles.length - 2];
+      if (last && (last.type === 'laser' || last.type === 'gate' || last.type === 'ufo')){
+        const cur = obstacles[obstacles.length - 1];
+        if (cur && (cur.type === 'laser' || cur.type === 'gate' || cur.type === 'ufo'))
+          gapMin += 0.45;   // 双危险组合额外+0.45s
+        else
+          gapMin += 0.22;   // 单危险也稍微放宽
+      }
+      spawnT = rand(gapMin, Math.max(gapMin + 0.4, lerp(1.65, 1.05, diff)));
     }
     starT -= dt;
     if (starT <= 0){ spawnStar(); starT = rand(2.6, 5.2); }
@@ -1551,8 +1591,8 @@ function update(dt){
               pb.y < r.y + r.h && pb.y + pb.h > r.y){ die(); }
         }
       } else if (o.type === 'gate'){
-        const top = {x:o.x, y:GY - 330, w:o.w, h:220};
-        const bot = {x:o.x, y:GY - 34,  w:o.w, h:34};
+        const top = {x:o.x, y:GY - 330, w:o.w, h:212};
+        const bot = {x:o.x, y:GY - 30,  w:o.w, h:30};
         if ((pb.x < top.x + top.w && pb.x + pb.w > top.x && pb.y < top.y + top.h && pb.y + pb.h > top.y) ||
             (pb.x < bot.x + bot.w && pb.x + pb.w > bot.x && pb.y < bot.y + bot.h && pb.y + pb.h > bot.y)){ die(); }
       } else if (o.type === 'slime'){
@@ -1560,6 +1600,11 @@ function update(dt){
         const r = {x:o.x, y:GY - o.h - hop, w:o.w, h:o.h + hop};
         if (pb.x < r.x + r.w && pb.x + pb.w > r.x &&
             pb.y < r.y + r.h && pb.y + pb.h > r.y){ die(); }
+      } else if (o.type === 'river'){
+        if (!o.w) o.w = o.wide ? rand(285, 330) : rand(150, 195);   // 首帧定宽
+        const r = {x:o.x, y:GY - 6, w:o.w, h:H - GY};              // 整个水域都是致命区
+        if (pb.x < r.x + r.w && pb.x + pb.w > r.x &&
+            pb.y + pb.h > r.y){ die(); }                            // 脚碰到水面即死
       } else {
         const r = obRect(o);
         if (pb.x < r.x + r.w && pb.x + pb.w > r.x &&
