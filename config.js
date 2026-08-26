@@ -22,5 +22,5 @@ window.GAME_CONFIG = {
   ],
 
   MAX_LOCAL_ENTRIES: 300,  // 本地最多保存多少条记录
-  SHOW_TOP: 15,            // 排行榜界面显示前多少名
+  SHOW_TOP: 100,            // 排行榜界面显示前多少名
 };

@@ -22,8 +22,8 @@ export default {
     if (url.pathname === '/scores') {
       // 拉取榜单
       if (request.method === 'GET') {
-        const q = parseInt(url.searchParams.get('limit') || '50', 10) || 50;
-        const limit = Math.min(Math.max(q, 1), 100);
+        const q = parseInt(url.searchParams.get('limit') || '100', 10) || 100;
+        const limit = Math.min(Math.max(q, 1), 200);
         const list = (await env.LB.get('scores', 'json')) || [];
         return json(list.sort((a, b) => b.score - a.score).slice(0, limit));
       }
