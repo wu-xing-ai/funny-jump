@@ -48,7 +48,7 @@
   .screen{
     position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
     gap:14px;text-align:center;z-index:10;padding:16px;
-    background:rgba(20,12,40,.35);backdrop-filter:blur(2px);
+    background:rgba(20,12,40,.45);
     transition:opacity .25s, visibility .25s;
     overflow-y:auto;
     visibility:visible;
@@ -377,7 +377,7 @@ const BASE_SPEED = 340, MAX_SPEED = 860, ACCEL = 9;
 const GRAV = 2600, JUMP_V = -880, DJUMP_V = -760, MAX_FALL = 1350, COYOTE = 0.08;
 
 const cv = document.getElementById('cv');
-const ctx = cv.getContext('2d', { alpha: false, desynchronized: true });
+const ctx = cv.getContext('2d', { alpha: false });
 const DPR = Math.min(window.devicePixelRatio || 1, 2);
 /* 自适应画质：手机帧率不足时自动降渲染分辨率，保流畅优先 */
 const QSCALE = [1, 0.85, 0.72];
