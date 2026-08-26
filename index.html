@@ -1991,20 +1991,26 @@ async function submitScore(){
   // 提交成功后自动切到云端榜，让玩家马上看到自己的名字
   let tip;
   if (synced){
-    // 重新拉一次云端榜，并兜底补上本条，确保玩家立刻看到自己
-    const remote = await apiGet();
-    if (remote.length){
-      lbCloud = remote.map(e => ({
-        name:e.name || '', score:e.score | 0, note:e.note || '',
-        ts:e.ts || Date.now(), anon:!!e.anon,
-      })).sort((a, b) => b.score - a.score);
-    }
+    // 先把本条成绩放进云端榜缓存并切榜：不等全服拉取，秒显
     if (!lbCloud.some(e => e.ts === entry.ts)){
       lbCloud.push(entry);
       lbCloud.sort((a, b) => b.score - a.score);
     }
     setLbTab('cloud');
     tip = '已提交！下方已切换到云端榜 ↑';
+    // 后台拉取全服最新排名，拿到就刷新显示（自己的这条始终保留）
+    apiGet().then(remote => {
+      if (!remote.length) return;
+      lbCloud = remote.map(e => ({
+        name:e.name || '', score:e.score | 0, note:e.note || '',
+        ts:e.ts || Date.now(), anon:!!e.anon,
+      })).sort((a, b) => b.score - a.score);
+      if (!lbCloud.some(e => e.ts === entry.ts)){
+        lbCloud.push(entry);
+        lbCloud.sort((a, b) => b.score - a.score);
+      }
+      if (lbTab === 'cloud') renderLbTab();
+    });
   } else {
     tip = '已存本地，联网后自动同步云端';
   }
