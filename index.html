@@ -876,6 +876,13 @@ function drawPlayer(){
   ctx.scale(bsx, bsy);
 
   const OUT = '#3a2b20';
+  if (godMode){ // 无敌模式金环
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,217,61,' + (0.55 + Math.sin(time*8)*0.25) + ')';
+    ctx.lineWidth = 3.5;
+    ctx.beginPath(); ctx.arc(0, -29, 38 + Math.sin(time*6)*2.5, 0, 7); ctx.stroke();
+    ctx.restore();
+  }
   ctx.lineWidth = 4; ctx.strokeStyle = OUT;
 
   // 小脚丫
@@ -1318,6 +1325,7 @@ function drawFlashes(){
    游戏状态与主逻辑
 ===================================================== */
 let state = 'menu';           // menu | play | dead
+let godMode = false;          // 无敌模式（仅管理员页开启，用于测试）
 let paused = false;
 let time = 0, dist = 0, speed = BASE_SPEED;
 let score = 0, starsGot = 0, nextMs = 100, rainbowT = 0, redF = 0;
@@ -1406,6 +1414,7 @@ function toMenu(){
   sfxClick();
 }
 function die(){
+  if (godMode){ addFloat(p.x, p.y - 80, '无敌中！', '#ffd93d', 20); return; }
   state = 'dead'; p.dead = true; p.vy = -560;
   shakeT = 0.5; shakeA = 14; redF = 1;
   sfxDie();
@@ -1657,6 +1666,23 @@ function frame(now){
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+
+/* 无敌模式控制：由 /admin 管理页通过 localStorage + BroadcastChannel 远程开关 */
+function applyGodMode(on){
+  godMode = on;
+  localStorage.setItem('funGame_god', on ? '1' : '0');
+  addFlash(on ? '🛡 无敌模式 ON' : '无敌模式 OFF', on ? '#ffd93d' : '#9a8a76');
+  sfxMilestone();
+}
+window.addEventListener('storage', e => {
+  if (e.key === 'funGame_god') applyGodMode(e.newValue === '1');
+});
+if (typeof BroadcastChannel !== 'undefined'){
+  const bc = new BroadcastChannel('funny_jump_admin');
+  bc.onmessage = ev => { if (ev.data && ev.data.type === 'god') applyGodMode(ev.data.on); };
+  window.__adminBC = bc;
+}
+godMode = localStorage.getItem('funGame_god') === '1';   // 启动时恢复上次状态
 
 /* ---------- 输入 ---------- */
 function primaryAction(){

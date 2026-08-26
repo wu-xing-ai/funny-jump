@@ -245,6 +245,12 @@ ${list.length ? `
     <button class="btn danger" id="clearAll">清空全部 Clear All</button>
     <span id="tip"></span>
   </div>
+  <div class="bar" style="border-top:1px solid var(--line);padding-top:clamp(12px,2vw,20px)">
+    <span class="kicker" style="margin:0">God Mode 无敌测试</span>
+    <button class="btn" id="godOn" style="border-color:var(--accent);color:var(--accent)">🛡 开启无敌</button>
+    <button class="btn" id="godOff">关闭无敌</button>
+    <span id="godTip" style="font-family:var(--mono);font-size:11px;color:var(--ink-soft)"></span>
+  </div>
   <footer><span>FUNNY JUMP — LEADERBOARD CONSOLE</span><span id="ftKey"></span></footer>
 </div></div>
 <script>
@@ -277,5 +283,14 @@ document.getElementById('clearAll').onclick = async () => {
   await fetch('/admin/clear?key=' + encodeURIComponent(KEY || ''));
   location.href = '/admin?key=' + encodeURIComponent(KEY || '');
 };
+/* ---- 无敌模式：向同浏览器的游戏页发送开关信号 ---- */
+function godTip(t){ document.getElementById('godTip').textContent = t; }
+function sendGod(on){
+  localStorage.setItem('funGame_god', on ? '1' : '0');
+  try{ const bc = new BroadcastChannel('funny_jump_admin'); bc.postMessage({type:'god', on}); }catch(e){}
+  godTip(on ? '已开启 → 切到游戏页即可生效' : '已关闭');
+}
+document.getElementById('godOn').onclick = () => { sendGod(true); };
+document.getElementById('godOff').onclick = () => { sendGod(false); };
 </script></body></html>`;
 }
