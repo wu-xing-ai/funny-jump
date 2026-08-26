@@ -60,9 +60,20 @@ export default {
       if (b.key !== env.ADMIN_KEY) return json({ error: '密码错误' }, 403);
       const arr = Array.isArray(b.list) ? b.list : null;
       if (!arr) return json({ error: 'bad list' }, 400);
-      const clean = arr.map(sanitize).filter(Boolean).sort((a, b2) => b2.score - a.score);
-      await env.LB.put('scores', JSON.stringify(clean));
-      return json({ ok: true, count: clean.length });
+      // 合并模式：按 ts+score 去重后与现有数据合并，避免管理页覆盖游戏新提交
+      const existing = (await env.LB.get('scores', 'json')) || [];
+      const seen = new Set();
+      const merged = [];
+      for (const e of [...arr.map(sanitize).filter(Boolean), ...existing]){
+        if (!e) continue;
+        const k = e.ts + '|' + e.score;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        merged.push(e);
+      }
+      merged.sort((a, b) => b.score - a.score);
+      await env.LB.put('scores', JSON.stringify(merged.slice(0, MAX_LIST)));
+      return json({ ok: true, count: merged.length });
     }
 
     // 其余路径交给静态资产服务（游戏页面等）
@@ -251,6 +262,11 @@ ${list.length ? `
     <button class="btn" id="godEnd">结束无敌测试</button>
     <span id="godTip" style="font-family:var(--mono);font-size:11px;color:var(--ink-soft)"></span>
   </div>
+  <div class="bar" style="border-top:1px solid var(--line);padding-top:clamp(12px,2vw,20px)">
+    <span class="kicker" style="margin:0">本机数据诊断</span>
+    <button class="btn" id="diagBtn">🔍 检查本机待同步成绩</button>
+    <span id="diagTip" style="font-family:var(--mono);font-size:11px;color:var(--ink-soft)"></span>
+  </div>
   <footer><span>FUNNY JUMP — LEADERBOARD CONSOLE</span><span id="ftKey"></span></footer>
 </div></div>
 <script>
@@ -278,6 +294,33 @@ document.getElementById('save').onclick = async () => {
   }catch(e){ tipEl.textContent = 'NETWORK ERROR'; }
 };
 document.getElementById('reload').onclick = () => location.href = '/admin?key=' + encodeURIComponent(KEY || '');
+
+/* ---- 本机诊断: 检查离线队列里卡住的成绩 ---- */
+document.getElementById('diagBtn')?.addEventListener('click', () => {
+  const ob = JSON.parse(localStorage.getItem('funGame_outbox_v1') || '[]');
+  const lb = JSON.parse(localStorage.getItem('funGame_leaderboard_v1') || '[]');
+  const tipEl = document.getElementById('diagTip');
+  if (!ob.length){
+    tipEl.textContent = '✓ 本机没有卡住的待同步成绩';
+    tipEl.style.color = '#2f9e44';
+  } else {
+    try{
+      fetch('/admin/save', {method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({key: KEY, list: ob})})
+        .then(r => r.json())
+        .then(j => {
+          if (j.ok){
+            localStorage.setItem('funGame_outbox_v1', '[]');
+            location.reload();
+          } else {
+            tipEl.textContent = '补传失败: ' + (j.error || '');
+            tipEl.style.color = '#e03131';
+          }
+        });
+      tipEl.textContent = '发现 ' + ob.length + ' 条待同步成绩，正在补传…';
+    }catch(e){ tipEl.textContent = '读取失败'; }
+  }
+});
 document.getElementById('clearAll').onclick = async () => {
   if (!confirm('确定清空整个云端榜单？不可恢复。')) return;
   await fetch('/admin/clear?key=' + encodeURIComponent(KEY || ''));
