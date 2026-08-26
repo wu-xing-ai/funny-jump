@@ -1857,11 +1857,12 @@ async function openLb(){
   $('lbScr').classList.remove('hide');
   setLbTab('local');                       // 默认展示本地榜，秒开
   const cloudBtn = $('cloudTabBtn');
-  if (!CFG.LEADERBOARD_API){               // 未配置云端接口：隐藏云端标签
-    cloudBtn.style.display = 'none';
-    return;
+  if (!CFG.LEADERBOARD_API){
+    // 同源模式：接口就在自己域名 /scores，云端标签照常可用
+    cloudBtn.style.display = '';
+  } else {
+    cloudBtn.style.display = '';
   }
-  cloudBtn.style.display = '';
   cloudBtn.disabled = true;                // 拉取中先禁用，防抖
   if (outboxGet().length) await flushOutbox();   // 有网先把欠着的成绩补传
   const remote = await apiGet();           // 拉云端榜单缓存到变量
@@ -1891,7 +1892,7 @@ function renderLbTab(){
   if (isLocal){
     el.textContent = CFG.LEADERBOARD_API
       ? '本机记录（提交过的也会存一份在这里）'
-      : '本地模式：记录保存在这台设备上；部署 Worker 后可全服共享';
+      : '本机记录 · 点上方「☁️ 云端榜」看全服排名';
   } else {
     el.textContent = lbCloud.length
       ? '全服共享榜单，所有人可见'
@@ -1948,15 +1949,16 @@ async function submitScore(){
   await flushOutbox();
   const synced = !outboxGet().some(e => e.ts === entry.ts);
   // 提交成功后自动切到云端榜，让玩家马上看到自己的名字
-  if (CFG.LEADERBOARD_API && synced){
+  let tip;
+  if (synced){
     setLbTab('cloud');
-    $('lbSrcTip').textContent = '已提交！你的云端排名↑';
+    tip = '已提交！下方已切换到云端榜 ↑';
+  } else {
+    tip = '已存本地，联网后自动同步云端';
   }
   runSubmitted = true;
   $('saveScoreBtn').disabled = true;
   $('saveScoreBtn').style.opacity = .55;
-  let tip = '已记录到本地榜单，感谢参与！';
-  if (CFG.LEADERBOARD_API) tip = synced ? '已提交到云端榜单！' : '已存本地，联网后会自动同步到云端';
   $('savedTip').textContent = tip;
   $('savedTip').style.display = 'block';
   sfxMilestone();
