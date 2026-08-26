@@ -1137,14 +1137,14 @@ function drawObstacle(o){
     const x = o.x, w = o.w;
     ctx.lineWidth = 4; ctx.strokeStyle = '#3a2b20';
     ctx.fillStyle = '#7048e8';
-    rr(x, GY - 330, w, 220, 10); ctx.fill(); ctx.stroke();
+    rr(x, GY - 330, w, 158, 10); ctx.fill(); ctx.stroke();
     ctx.fillStyle = '#9775fa';
     rr(x, GY - 30, w, 30, 8); ctx.fill(); ctx.stroke();
-    hazard(x, GY - 126, w, 12);
+    hazard(x, GY - 184, w, 12);
     hazard(x, GY - 30, w, 10);
     // 缝隙提示灯（一闪一闪提醒你从这过）
     ctx.fillStyle = Math.floor(time * 5) % 2 ? '#ffd93d' : '#ff5d8f';
-    ctx.beginPath(); ctx.arc(x + w / 2, GY - 74, 5, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + w / 2, GY - 105, 5, 0, 7); ctx.fill();
     ctx.lineWidth = 3; ctx.stroke();
   }
   else if (o.type === 'slime'){
@@ -1559,9 +1559,9 @@ function update(dt){
       if (last && (last.type === 'laser' || last.type === 'gate' || last.type === 'ufo')){
         const cur = obstacles[obstacles.length - 1];
         if (cur && (cur.type === 'laser' || cur.type === 'gate' || cur.type === 'ufo'))
-          gapMin += 0.45;   // 双危险组合额外+0.45s
+          gapMin += 0.9;    // 双危险组合额外+0.9s，避免激光逼停后闸门贴脸无解
         else
-          gapMin += 0.22;   // 单危险也稍微放宽
+          gapMin += 0.35;   // 单危险也稍微放宽
       }
       spawnT = rand(gapMin, Math.max(gapMin + 0.4, lerp(1.65, 1.05, diff)));
     }
@@ -1591,8 +1591,9 @@ function update(dt){
               pb.y < r.y + r.h && pb.y + pb.h > r.y){ die(); }
         }
       } else if (o.type === 'gate'){
-        const top = {x:o.x, y:GY - 330, w:o.w, h:212};
+        const top = {x:o.x, y:GY - 330, w:o.w, h:150};   // 上柱底部 GY-180
         const bot = {x:o.x, y:GY - 30,  w:o.w, h:30};
+        // 可通过缝隙：离地 30~180px，共 150px（原88px几乎必死）
         if ((pb.x < top.x + top.w && pb.x + pb.w > top.x && pb.y < top.y + top.h && pb.y + pb.h > top.y) ||
             (pb.x < bot.x + bot.w && pb.x + pb.w > bot.x && pb.y < bot.y + bot.h && pb.y + pb.h > bot.y)){ die(); }
       } else if (o.type === 'slime'){
