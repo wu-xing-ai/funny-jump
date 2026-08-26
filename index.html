@@ -1947,6 +1947,11 @@ async function submitScore(){
   outboxSet(box);
   await flushOutbox();
   const synced = !outboxGet().some(e => e.ts === entry.ts);
+  // 提交成功后自动切到云端榜，让玩家马上看到自己的名字
+  if (CFG.LEADERBOARD_API && synced){
+    setLbTab('cloud');
+    $('lbSrcTip').textContent = '已提交！你的云端排名↑';
+  }
   runSubmitted = true;
   $('saveScoreBtn').disabled = true;
   $('saveScoreBtn').style.opacity = .55;
