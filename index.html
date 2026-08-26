@@ -61,7 +61,7 @@
   @keyframes pop{from{transform:scale(.72);opacity:0}to{transform:scale(1);opacity:1}}
   /* 容器查询：游戏视口偏矮时(横屏手机)压缩结算卡，尽量一屏放下 */
   #wrap{container-type:size}
-  @container (max-height:520px){
+  @container (max-height:700px){
     .screen{gap:7px;padding:8px}
     .card{padding:12px;border-radius:14px}
     .card h2{font-size:18px;margin:0 0 2px}
@@ -81,8 +81,8 @@
     #subtitle{font-size:12px}
     #keysTouch,#tip{font-size:11px}
   }
-  /* 第二档：超矮视口（手机全屏横屏典型高度约350-400px），结算卡极限紧凑化确保一屏放下 */
-  @container (max-height:430px){
+  /* 第二档：超矮视口（手机全屏横屏典型高度约350-430px），结算卡极限紧凑化确保一屏放下 */
+  @container (max-height:500px){
     .screen{gap:5px;padding:6px}
     .card{padding:9px 11px;border-radius:12px}
     .card h2{font-size:16px;margin:0}
