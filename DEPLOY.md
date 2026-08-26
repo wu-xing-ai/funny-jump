@@ -101,7 +101,7 @@ Settings → Secrets and variables → Actions → New repository secret
 
 | 名称 | 值 |
 |---|---|
-| `CLOUDFLARE_API_TOKEN` | dash.cloudflare.com/profile/api-tokens 创建，用「编辑 Cloudflare Workers」模板并追加 Pages:Edit 权限 |
+| `CLOUDFLARE_API_TOKEN` | dash.cloudflare.com/profile/api-tokens 创建，用「编辑 Cloudflare Workers」模板 |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare 控制台右侧栏 / Workers 和 Pages 概览页 |
 
 之后每次 push 到 `main` 分支自动部署，也可在 Actions 页面手动触发。

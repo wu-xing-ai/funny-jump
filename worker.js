@@ -3,16 +3,83 @@
  * ------------------------------------------------
  * 静态资源由 wrangler.toml 的 [assets] 自动托管；
  * 本脚本只处理排行榜接口，其余路径回落到静态资产：
- *   GET  /scores            拉取榜单（?limit=N，默认50，最大100）
- *   POST /scores            提交成绩 {name, score, note, anon}
- *   GET  /admin/clear?key=  清空榜单（需在配置中设置 ADMIN_KEY）
+ *   GET  /scores            拉取榜单（?limit=N，默认100，最大200）
+ *   POST /scores            提交成绩 {name, score, note, anon, ts}
+ *   GET  /admin             管理页（需在配置中设置 ADMIN_KEY）
+ *   GET  /admin/clear?key=  清空榜单
+ *
+ * 存储说明：每条成绩是一个独立的 KV 键，整条记录编码在键名里
+ * （s/<ts>/<score>/<匿名0|1>/<名字base64url>/<备注base64url>），
+ * 读取只用 KV list——list 不走边缘缓存，永远拿到最新数据。
+ * 旧版把整个数组塞进单个 scores 键做「读-改-写」：KV get 有最低 60 秒
+ * 边缘缓存，导致刚提交的成绩一分钟内看不到，且缓存期内再次提交会读到
+ * 旧数组、写回时把别人的新成绩覆盖丢失。首次访问会自动把旧数据迁移到新格式。
  */
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Cache-Control': 'no-store',
 };
-const MAX_LIST = 2000; // KV 里最多保留多少条原始记录
+const MAX_LIST = 2000; // 最多保留多少条记录（超出后剪掉最老的）
+const PREFIX = 's/';
+
+/* ---------- 键名编解码：整条记录编码在键名里，list 一次拿全 ---------- */
+function b64e(s){
+  const bytes = new TextEncoder().encode(String(s ?? ''));
+  let bin = '';
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function b64d(s){
+  try {
+    const bin = atob(String(s).replace(/-/g, '+').replace(/_/g, '/'));
+    return new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0)));
+  } catch (e){ return ''; }
+}
+function keyOf(e){
+  return `${PREFIX}${Math.trunc(e.ts)}/${Math.trunc(e.score)}/${e.anon ? 1 : 0}/${b64e(e.name)}/${b64e(e.note)}`;
+}
+function entryOf(key){
+  const p = String(key).split('/');
+  if (p.length !== 6 || p[0] !== 's') return null;
+  const ts = parseInt(p[1], 10), score = parseInt(p[2], 10);
+  if (!Number.isFinite(ts) || !Number.isFinite(score)) return null;
+  return { ts, score, anon: p[3] === '1', name: b64d(p[4]), note: b64d(p[5]) };
+}
+
+/* ---------- 读写整套榜单 ---------- */
+async function listAllKeys(env){
+  const out = [];
+  let cursor;
+  do {
+    const r = await env.LB.list({ prefix: PREFIX, limit: 1000, cursor });
+    for (const k of r.keys) out.push(k.name);
+    cursor = r.list_complete ? null : r.cursor;
+  } while (cursor);
+  return out;
+}
+// 旧版数据（单个 scores 键里的数组）自动迁移成分键格式，只执行一次
+async function migrate(env){
+  const legacy = await env.LB.get('scores', 'json');
+  if (!Array.isArray(legacy) || !legacy.length) return;
+  await Promise.all(legacy
+    .filter(e => e && typeof e === 'object' && Number.isFinite(Number(e.score)))
+    .map(e => env.LB.put(keyOf({
+      name: String(e.name ?? '').slice(0, 20),
+      anon: !!e.anon,
+      score: Math.floor(Number(e.score)),
+      note: String(e.note ?? '').slice(0, 60),
+      ts: Math.floor(Number(e.ts)) || Date.now(),
+    }), '1')));
+  await env.LB.delete('scores');
+}
+async function loadAll(env){
+  await migrate(env);
+  const keys = await listAllKeys(env);
+  return { keys, list: keys.map(entryOf).filter(Boolean) };
+}
+const byRank = (a, b) => b.score - a.score || b.ts - a.ts;
 
 export default {
   async fetch(request, env) {
@@ -24,26 +91,32 @@ export default {
       if (request.method === 'GET') {
         const q = parseInt(url.searchParams.get('limit') || '100', 10) || 100;
         const limit = Math.min(Math.max(q, 1), 200);
-        const list = (await env.LB.get('scores', 'json')) || [];
-        return json(list.sort((a, b) => b.score - a.score).slice(0, limit));
+        const { list } = await loadAll(env);
+        return json(list.sort(byRank).slice(0, limit));
       }
-      // 提交成绩
+      // 提交成绩：直接写独立键，不读旧值，天然没有并发覆盖问题；同一条重复提交是幂等的
       if (request.method === 'POST') {
         let b = {};
         try { b = await request.json(); } catch (e) { /* 忽略 */ }
         const entry = sanitize(b);
         if (!entry) return json({ error: 'bad request' }, 400);
-        const list = (await env.LB.get('scores', 'json')) || [];
-        list.push(entry);
-        await env.LB.put('scores', JSON.stringify(list.slice(-MAX_LIST)));
-        return json({ ok: true });
+        await env.LB.put(keyOf(entry), '1');
+        // 超出上限时剪掉最老的（键名以时间戳开头，字典序即时间序）
+        const keys = await listAllKeys(env);
+        if (keys.length > MAX_LIST){
+          keys.sort();
+          await Promise.all(keys.slice(0, keys.length - MAX_LIST).map(k => env.LB.delete(k)));
+        }
+        return json({ ok: true, entry });
       }
     }
 
     // 管理接口：清空榜单（需在配置中设置 ADMIN_KEY）
     if (url.pathname === '/admin/clear' && env.ADMIN_KEY
         && url.searchParams.get('key') === env.ADMIN_KEY) {
-      await env.LB.delete('scores');
+      const keys = await listAllKeys(env);
+      await Promise.all(keys.map(k => env.LB.delete(k)));
+      await env.LB.delete('scores'); // 旧格式残留一并清掉
       return json({ ok: true });
     }
 
@@ -51,8 +124,8 @@ export default {
     if (url.pathname === '/admin' && env.ADMIN_KEY) {
       if (url.searchParams.get('key') !== env.ADMIN_KEY)
         return new Response(adminLoginHtml(), { headers: { ...CORS, 'Content-Type': 'text/html; charset=utf-8' } });
-      const list = ((await env.LB.get('scores', 'json')) || []).filter(e => e && typeof e === 'object');
-      return new Response(adminPageHtml(list), { headers: { ...CORS, 'Content-Type': 'text/html; charset=utf-8' } });
+      const { list } = await loadAll(env);
+      return new Response(adminPageHtml(list.sort(byRank)), { headers: { ...CORS, 'Content-Type': 'text/html; charset=utf-8' } });
     }
     if (url.pathname === '/admin/save' && request.method === 'POST' && env.ADMIN_KEY) {
       let b = {};
@@ -61,18 +134,23 @@ export default {
       const arr = Array.isArray(b.list) ? b.list : null;
       if (!arr) return json({ error: 'bad list' }, 400);
       // 合并模式：按 ts+score 去重后与现有数据合并，避免管理页覆盖游戏新提交
-      const existing = (await env.LB.get('scores', 'json')) || [];
+      const { keys, list: existing } = await loadAll(env);
       const seen = new Set();
       const merged = [];
       for (const e of [...arr.map(sanitize).filter(Boolean), ...existing]){
-        if (!e) continue;
         const k = e.ts + '|' + e.score;
         if (seen.has(k)) continue;
         seen.add(k);
         merged.push(e);
       }
-      merged.sort((a, b) => b.score - a.score);
-      await env.LB.put('scores', JSON.stringify(merged.slice(0, MAX_LIST)));
+      merged.sort(byRank);
+      // 只写增量、只删多余，不做整表重写
+      const keep = new Set(merged.map(keyOf));
+      const cur = new Set(keys);
+      await Promise.all([
+        ...keys.filter(k => !keep.has(k)).map(k => env.LB.delete(k)),
+        ...merged.filter(e => !cur.has(keyOf(e))).map(e => env.LB.put(keyOf(e), '1')),
+      ]);
       return json({ ok: true, count: merged.length });
     }
 
@@ -94,12 +172,14 @@ function sanitize(b) {
   if (!Number.isFinite(score) || score < 0 || score > 9999999) return null;
   const rawName = String(b.name ?? '').slice(0, 20).trim();
   const anon = !!b.anon || !rawName;
+  // 优先采用客户端时间戳（同一局成绩重传时键名一致，天然去重）
+  const ts = Math.floor(Number(b.ts));
   return {
     name: anon ? '' : rawName,
     anon,
     score,
     note: String(b.note ?? '').slice(0, 60).trim(),
-    ts: Date.now(),
+    ts: (Number.isFinite(ts) && ts > 0) ? Math.min(ts, Date.now() + 600000) : Date.now(),
   };
 }
 

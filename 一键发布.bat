@@ -20,13 +20,13 @@ git push origin main
 if errorlevel 1 goto :err
 
 echo.
-echo [3/3] 部署到 Cloudflare Pages...
-call wrangler pages deploy . --project-name=funny-jump --branch=main --commit-dirty=true
+echo [3/3] 部署到 Cloudflare Workers（游戏页面 + 排行榜接口一体）...
+call wrangler deploy
 if errorlevel 1 goto :err
 
 echo.
 echo ================================================
-echo  完成！线上地址: https://funny-jump.pages.dev
+echo  完成！线上地址: https://jump.wuxinw.dpdns.org
 echo ================================================
 pause
 goto :eof

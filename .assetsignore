@@ -1,6 +1,12 @@
 .github
+.git
 一键发布.bat
 .assetsignore
 .wrangler
 /worker.js
 /wrangler.toml
+/worker
+tail.log
+kv_c.json
+add_diag.cjs
+worker.js.bak
