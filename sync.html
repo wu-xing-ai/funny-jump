@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>同步工具 · 本地成绩上传到云端榜</title>
+<link rel="icon" href="data:,">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    min-height:100vh;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(135deg,#1b2a5b,#5b2a8c 45%,#b02a6e);
+    font-family:"PingFang SC","Microsoft YaHei",sans-serif;color:#fff;padding:20px;
+  }
+  .card{
+    background:#fffef5;color:#3a2b20;border-radius:22px;padding:26px 30px;
+    width:min(620px,96vw);box-shadow:0 10px 0 rgba(0,0,0,.18),0 22px 40px rgba(0,0,0,.4);
+  }
+  h1{font-size:24px;color:#e0346e;margin-bottom:4px}
+  .sub{font-size:13px;color:#9a8a76;margin-bottom:16px;line-height:1.7}
+  .stat{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+  .pill{background:#fff;border:3px solid #ffd93d;border-radius:14px;padding:8px 16px;font-size:14px}
+  .pill b{color:#e8590c;font-size:20px}
+  #preview{
+    max-height:260px;overflow:auto;border:2px solid #e8dcc0;border-radius:12px;
+    margin-bottom:14px;font-size:13.5px;
+  }
+  .row{display:flex;gap:8px;padding:6px 12px;align-items:center}
+  .row:nth-child(odd){background:#fff3d6}
+  .row .r{font-weight:900;width:34px;color:#e8590c;flex-shrink:0}
+  .row .n{font-weight:900;min-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .row .s{margin-left:auto;font-weight:900;color:#e8590c}
+  .row .t{color:#b0a290;font-size:11px;flex-shrink:0}
+  .btn{
+    border:none;cursor:pointer;font-family:inherit;font-weight:900;color:#fff;
+    font-size:17px;padding:13px 34px;border-radius:999px;width:100%;
+    background:linear-gradient(180deg,#4ade80,#22b45e);box-shadow:0 5px 0 #17804a;
+  }
+  .btn:active{transform:translateY(4px);box-shadow:0 1px 0 #17804a}
+  .btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+  #bar{height:10px;background:#f0e6cc;border-radius:99px;margin:12px 0 6px;display:none;overflow:hidden}
+  #barIn{height:100%;width:0;background:linear-gradient(90deg,#ffd93d,#ff5d8f);transition:width .15s}
+  #log{font-size:12.5px;color:#6b5b4a;line-height:1.8;min-height:20px;word-break:break-all}
+  .ok{color:#2f9e44;font-weight:bold}
+  .err{color:#e03131;font-weight:bold}
+  a{color:#b06a2c;font-size:12px}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>☁️ 本地成绩同步工具</h1>
+  <div class="sub">
+    读取<b>这台电脑这个浏览器</b>里保存的本地排行榜和离线队列，按分数排名后逐条上传到云端全服榜。<br>
+    云端按「时间+分数+名字」自动去重，重复点也不会产生重复记录，放心用。
+  </div>
+  <div class="stat">
+    <div class="pill">本地记录 <b id="cLocal">-</b></div>
+    <div class="pill">离线队列 <b id="cOutbox">-</b></div>
+    <div class="pill">去重后待传 <b id="cTodo">-</b></div>
+  </div>
+  <div id="preview"></div>
+  <div id="bar"><div id="barIn"></div></div>
+  <button class="btn" id="go">开始同步到云端榜</button>
+  <div id="log" style="margin-top:10px"></div>
+  <div style="margin-top:10px;text-align:center"><a href="/">← 返回游戏</a> · <a href="/?t=1" id="openLb">看云端榜</a></div>
+</div>
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+function read(key){
+  try { const a = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(a) ? a : []; }
+  catch (e){ return []; }
+}
+// 本地榜 + 离线队列合并，按 时间|分数 去重，按分数从高到低排
+const local = read('funGame_leaderboard_v1');
+const outbox = read('funGame_outbox_v1');
+const seen = new Set();
+const todo = [];
+for (const e of [...local, ...outbox]){
+  if (!e || typeof e !== 'object') continue;
+  const score = Math.floor(Number(e.score));
+  if (!Number.isFinite(score) || score <= 0) continue;
+  const k = (e.ts || 0) + '|' + score + '|' + (e.name || '');
+  if (seen.has(k)) continue;
+  seen.add(k);
+  todo.push({
+    name: String(e.name || '').slice(0, 12),
+    score,
+    note: String(e.note || '').slice(0, 24),
+    ts: Math.floor(Number(e.ts)) || Date.now(),
+    anon: !!e.anon,
+  });
+}
+todo.sort((a, b) => b.score - a.score);
+
+$('cLocal').textContent = local.length;
+$('cOutbox').textContent = outbox.length;
+$('cTodo').textContent = todo.length;
+
+const fmt = ts => {
+  const d = new Date(ts), p = n => String(n).padStart(2, '0');
+  return `${d.getMonth() + 1}月${d.getDate()}日 ${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+$('preview').innerHTML = todo.length
+  ? todo.slice(0, 50).map((e, i) =>
+      `<div class="row"><span class="r">#${i + 1}</span><span class="n">${e.anon ? '匿名选手' : esc(e.name)}</span>` +
+      `<span class="t">${fmt(e.ts)}</span><span class="s">${e.score}</span></div>`).join('')
+    + (todo.length > 50 ? `<div class="row"><span class="t">…共 ${todo.length} 条，仅预览前 50</span></div>` : '')
+  : '<div class="row"><span class="t">这个浏览器里没有本地记录，去游戏里玩一局再来～</span></div>';
+
+$('go').disabled = !todo.length;
+$('openLb').onclick = ev => { ev.preventDefault(); location.href = '/'; };
+
+$('go').onclick = async () => {
+  const btn = $('go'), log = $('log'), bar = $('bar'), barIn = $('barIn');
+  btn.disabled = true; btn.textContent = '同步中…'; bar.style.display = 'block';
+  let ok = 0, fail = 0;
+  for (let i = 0; i < todo.length; i++){
+    const e = todo[i];
+    try {
+      const r = await fetch('/scores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(e),
+      });
+      r.ok ? ok++ : fail++;
+    } catch (err){ fail++; }
+    barIn.style.width = ((i + 1) / todo.length * 100) + '%';
+    log.innerHTML = `正在上传 ${i + 1} / ${todo.length} …`;
+  }
+  if (!fail){
+    // 全部传上去了：清空离线队列（本地榜保留，作为本机备份）
+    try { localStorage.setItem('funGame_outbox_v1', '[]'); } catch (e){}
+    log.innerHTML = `<span class="ok">✓ 全部完成！${ok} 条已上传到云端榜。</span>` +
+      `<br>云端榜单全球生效有约 1 分钟延迟，稍等片刻回游戏点「☁️ 云端榜」即可看到。`;
+  } else {
+    log.innerHTML = `<span class="${ok ? 'ok' : 'err'}">成功 ${ok} 条</span>，<span class="err">失败 ${fail} 条</span>` +
+      `<br>失败的会留在离线队列里，联网后打开游戏会自动补传。`;
+  }
+  btn.textContent = '同步完成';
+};
+</script>
+</body>
+</html>
